@@ -104,6 +104,7 @@ namespace verona::rt
     friend class Noticeboard;
 
     std::atomic<Slot*> last_slot{nullptr};
+    std::atomic<bool> in_memory{true};
 
     /*
      * Cown's read ref count.
@@ -113,6 +114,10 @@ namespace verona::rt
     ReadRefCount read_ref_count;
 
   public:
+    void debug_write_to_disk() {
+      in_memory.store(false);
+    }
+
 #ifdef USE_SYSTEMATIC_TESTING_WEAK_NOTICEBOARDS
     std::vector<BaseNoticeboard*> noticeboards;
 
@@ -150,6 +155,15 @@ namespace verona::rt
     // }
 
   private:
+    void fetch_from_disk() {
+      std::thread disk_fetch_thread([&](){
+        Logging::cout() << "Fetching cown " << this << " from disk" << Logging::endl;
+        in_memory.store(true);
+      });
+
+      disk_fetch_thread.detach();
+    }
+
     // void cown_notified()
     // {
     //   // This is not a message make sure we know that.
