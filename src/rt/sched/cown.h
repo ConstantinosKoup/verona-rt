@@ -104,7 +104,13 @@ namespace verona::rt
     friend class Noticeboard;
 
     std::atomic<Slot*> last_slot{nullptr};
-    std::atomic<bool> in_memory{true};
+
+    enum class SwapStatus {
+      IN_MEMORY,
+      FETCHING,
+      SWAPPED,
+    };
+    std::atomic<SwapStatus> swap_status{SwapStatus::IN_MEMORY};
 
     /*
      * Cown's read ref count.
@@ -115,7 +121,7 @@ namespace verona::rt
 
   public:
     void debug_write_to_disk() {
-      in_memory.store(false);
+      swap_status.store(SwapStatus::SWAPPED);
     }
 
 #ifdef USE_SYSTEMATIC_TESTING_WEAK_NOTICEBOARDS
@@ -156,12 +162,17 @@ namespace verona::rt
 
   private:
     void fetch_from_disk() {
-      std::thread disk_fetch_thread([&](){
-        Logging::cout() << "Fetching cown " << this << " from disk" << Logging::endl;
-        in_memory.store(true);
-      });
+      auto expected = SwapStatus::SWAPPED;
+      if (swap_status.compare_exchange_strong(expected, SwapStatus::FETCHING))
+      {
+        std::thread disk_fetch_thread([&](){
+          Logging::cout() << "Fetching cown " << this << " from disk" << Logging::endl;
+          swap_status.store(SwapStatus::IN_MEMORY);
+        });
 
-      disk_fetch_thread.detach();
+        disk_fetch_thread.detach();
+      }
+
     }
 
     // void cown_notified()
