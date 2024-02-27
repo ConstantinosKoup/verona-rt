@@ -161,20 +161,6 @@ namespace verona::rt
     // }
 
   private:
-    void fetch_from_disk() {
-      auto expected = SwapStatus::SWAPPED;
-      if (swap_status.compare_exchange_strong(expected, SwapStatus::FETCHING))
-      {
-        std::thread disk_fetch_thread([&](){
-          Logging::cout() << "Fetching cown " << this << " from disk" << Logging::endl;
-          swap_status.store(SwapStatus::IN_MEMORY);
-        });
-
-        disk_fetch_thread.detach();
-      }
-
-    }
-
     // void cown_notified()
     // {
     //   // This is not a message make sure we know that.
@@ -187,6 +173,32 @@ namespace verona::rt
     // }
 
   public:
+      /**
+     * If a cown's data is stored in the disk, it spawns a thread to fetch the data into
+     * memory. If the cown is on disk it will temporarilly increment the waiting 
+     * behaviour's body count to prevent it from being scheduled until the cown is swapped.
+     * @param behaviour_body_inc method to increment the behaviour's body count
+     * @param behaviour_resolve method to decrement the behaviour's body count
+     */
+    void try_fetch_from_disk(std::function<void()> behaviour_body_inc, std::function<void()> behaviour_resolve) {
+      auto expected = SwapStatus::SWAPPED;
+      if (swap_status.compare_exchange_strong(expected, SwapStatus::FETCHING))
+      {
+        behaviour_body_inc();
+
+        std::thread disk_fetch_thread([this, behaviour_resolve](){
+          Logging::cout() << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<Fetching cown " << this << " from disk" << Logging::endl;
+          for (int i = 0; i <  100000; ++i) {
+            asm("");
+          }
+          swap_status.store(SwapStatus::IN_MEMORY);
+          behaviour_resolve();
+        });
+
+        disk_fetch_thread.detach();
+      }
+    }
+
     // bool release_early()
     // {
     //   auto* body = Scheduler::local()->message_body;
