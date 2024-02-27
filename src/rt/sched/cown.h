@@ -187,7 +187,7 @@ namespace verona::rt
         behaviour_body_inc();
 
         std::thread disk_fetch_thread([this, behaviour_resolve](){
-          Logging::cout() << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<Fetching cown " << this << " from disk" << Logging::endl;
+          Logging::cout() << "Fetching cown " << this << " from disk" << Logging::endl;
           for (int i = 0; i <  100000; ++i) {
             asm("");
           }
