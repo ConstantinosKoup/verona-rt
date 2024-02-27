@@ -230,6 +230,10 @@ namespace verona::cpp
         verona::rt::Cown::acquire(allocated_cown);
     }
 
+    void debug_write_to_disk() {
+      allocated_cown->debug_write_to_disk();
+    }
+
     /**
      * Copy an existing cown ptr.  Shares the underlying cown.
      */
