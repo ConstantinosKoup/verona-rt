@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include <boost/archive/binary_oarchive.hpp>
 #include <functional>
 #include <tuple>
 #include <utility>
 #include <verona.h>
-
+#include <fstream>
 namespace verona::cpp
 {
   using namespace verona::rt;
@@ -231,7 +232,19 @@ namespace verona::cpp
     }
 
     void debug_write_to_disk() {
-      allocated_cown->debug_write_to_disk();
+      std::function<void()> writer_func([this](){
+        // std::stringstream filename;
+        // filename << allocated_cown;
+
+        // std::string foo = "foo.bin";
+        // std::ofstream file(foo, std::ios::binary);
+
+        // file.write(allocated_cown->value, sizeof(allocated_cown->value));
+        // file.flush();
+        return;
+      });
+
+      allocated_cown->debug_write_to_disk(writer_func);
     }
 
     /**

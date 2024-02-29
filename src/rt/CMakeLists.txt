@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.8)
 project(verona-rt C CXX)
 
+# # Include Boost
+find_package(Boost REQUIRED COMPONENTS serialization)
+include_directories(${Boost_INCLUDE_DIRS})
+
 macro(subdirlist result curdir)
   file(GLOB children LIST_DIRECTORIES true CONFIGURE_DEPENDS RELATIVE ${curdir} ${curdir}/*)
   set(dirlist "")
@@ -56,7 +60,7 @@ if(VERONA_CI_BUILD)
   target_compile_definitions(verona_rt INTERFACE -DCI_BUILD)
 endif()
 
-target_link_libraries(verona_rt INTERFACE snmalloc)
+target_link_libraries(verona_rt INTERFACE snmalloc ${Boost_LIBRARIES})
 target_include_directories(verona_rt INTERFACE .)
 
 if(MSVC)
