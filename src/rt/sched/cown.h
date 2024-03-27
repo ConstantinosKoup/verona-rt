@@ -122,28 +122,29 @@ namespace verona::rt
 
   public:
     void debug_write_to_disk(const std::function<void()>& writer_func) {
-      auto curr_status = swap_status.load(std::memory_order_relaxed);
-      if (curr_status == SwapStatus::SWAPPING || curr_status == SwapStatus::SWAPPED) {
-        Logging::cout() << "Trying to write cown that is already swapped" << Logging::endl;
-        return;
-      }
-
-      while (curr_status == SwapStatus::FETCHING) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        curr_status = swap_status.load(std::memory_order_relaxed);
-      }
-
       auto expected = SwapStatus::IN_MEMORY;
-      if (!swap_status.compare_exchange_strong(expected, SwapStatus::SWAPPING)) {
-        // Only way we can end up here is if someone else started swapping before us
-        Logging::cout() << "Trying to write cown that is already swapped" << Logging::endl;
+      if (!swap_status.compare_exchange_strong(expected, SwapStatus::SWAPPING, std::memory_order_acquire))
+      {
+        Logging::cout() << "Error in writing to disk" << Logging::endl;
+        exit(EXIT_FAILURE);
+      }
+
+      // If another thread is using this cown then we abort the swap
+      if (last_slot.load(std::memory_order_acquire) != nullptr) {
+        swap_status.store(expected, std::memory_order_release);
         return;
       }
 
       std::thread([&writer_func, this](){
         writer_func();
-        swap_status.store(SwapStatus::SWAPPED);
-      });
+        
+        // Check if someone cancelled the swap
+        auto expected = SwapStatus::SWAPPING;
+        if (!swap_status.compare_exchange_strong(expected, SwapStatus::SWAPPED, std::memory_order_release))
+        {
+          // maybe deleter_func();
+        }
+      }).detach();
     }
 
 #ifdef USE_SYSTEMATIC_TESTING_WEAK_NOTICEBOARDS
@@ -203,13 +204,15 @@ namespace verona::rt
      * @param behaviour_resolve method to decrement the behaviour's body count
      */
     void try_fetch_from_disk(std::function<void()> behaviour_body_inc, std::function<void()> behaviour_resolve) {
-      // TODO better way than busy waiting
-      while(swap_status.load(std::memory_order_relaxed) == SwapStatus::SWAPPING) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      auto expected = SwapStatus::SWAPPING;
+      if (swap_status.compare_exchange_strong(expected, SwapStatus::IN_MEMORY, std::memory_order_acq_rel))
+      {
+        Logging::cout() << "Cacnelled swapping for cown " << this << Logging::endl;
+        return;
       }
 
-      auto expected = SwapStatus::SWAPPED;
-      if (swap_status.compare_exchange_strong(expected, SwapStatus::FETCHING))
+      expected = SwapStatus::SWAPPED;
+      if (swap_status.compare_exchange_strong(expected, SwapStatus::FETCHING, std::memory_order_acquire))
       {
         behaviour_body_inc();
 
@@ -218,7 +221,7 @@ namespace verona::rt
           for (int i = 0; i <  100000; ++i) {
             asm("");
           }
-          swap_status.store(SwapStatus::IN_MEMORY);
+          swap_status.store(SwapStatus::IN_MEMORY, std::memory_order_release);
           behaviour_resolve();
         });
 

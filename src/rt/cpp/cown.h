@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
-#include <boost/archive/binary_oarchive.hpp>
 #include <functional>
 #include <tuple>
 #include <utility>
