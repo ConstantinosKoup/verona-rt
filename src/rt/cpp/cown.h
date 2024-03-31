@@ -7,6 +7,8 @@
 #include <utility>
 #include <verona.h>
 #include <fstream>
+
+#include "lambdabehaviour.h"
 namespace verona::cpp
 {
   using namespace verona::rt;
@@ -46,6 +48,10 @@ namespace verona::cpp
   private:
     T value;
 
+    // If we convert value to pointer we don't need this, or we can make value optional & atomic
+    // maybe doesn't need to be atomic, as cowns are atomic
+    std::atomic<bool> in_memory{true};
+
     template<typename... Args>
     ActualCown(Args&&... ts) : value(std::forward<Args>(ts)...)
     {}
@@ -58,6 +64,20 @@ namespace verona::cpp
 
     template<typename TT, typename... Args>
     friend cown_ptr<TT> make_cown(Args&&... ts);
+
+  public:
+    void fetch_from_disk() {
+      bool expected = false;
+      if (in_memory.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
+        schedule_lambda(this, [this](){
+          Logging::cout() << ">>>>>>>>>>>>>>>>>>>>>>>>>>>Fetching cown " << this << Logging::endl;
+        });
+      }
+    }
+
+    void debug_write_to_disk() {
+      in_memory.store(false, std::memory_order_acq_rel);
+    }
   };
 
   /**
@@ -231,19 +251,7 @@ namespace verona::cpp
     }
 
     void debug_write_to_disk() {
-      std::function<void()> writer_func([this](){
-        // std::stringstream filename;
-        // filename << allocated_cown;
-
-        // std::string foo = "foo.bin";
-        // std::ofstream file(foo, std::ios::binary);
-
-        // file.write(allocated_cown->value, sizeof(allocated_cown->value));
-        // file.flush();
-        return;
-      });
-
-      allocated_cown->debug_write_to_disk(writer_func);
+      allocated_cown->debug_write_to_disk();
     }
 
     /**

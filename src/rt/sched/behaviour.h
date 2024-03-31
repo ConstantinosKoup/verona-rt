@@ -108,8 +108,6 @@ namespace verona::rt
       {
         auto* s = new (&slots[i]) Slot(requests[i].cown());
         
-        s->cown->try_fetch_from_disk([body](){ ++body->exec_count_down; }, [body](){ body->resolve(); });
-
         if (requests[i].is_move())
           s->set_move();
       }
