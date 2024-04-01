@@ -45,6 +45,10 @@ namespace verona::cpp
       c.allocated_cown = nullptr;
     }
 
+    void fetch_cown_from_disk() {
+      t->fetch_from_disk();
+    }
+
     template<typename F, typename... Args>
     friend class When;
   };
@@ -123,6 +127,13 @@ namespace verona::cpp
       }
     }
 
+    void fetch_cown_from_disk() {
+      for (size_t i = 0; i < arr_len; i++)
+      {
+        act_array[i]->fetch_from_disk();
+      }
+    }
+
     AccessBatch& operator=(AccessBatch&&) = delete;
     AccessBatch(const AccessBatch&) = delete;
     AccessBatch& operator=(const AccessBatch&) = delete;
@@ -167,6 +178,20 @@ namespace verona::cpp
     template<typename... Args2>
     friend class Batch;
 
+    template<size_t index = 0, typename... Ts>
+    void fetch_cowns(std::tuple<Ts...>& cown_tuple)
+    {
+      if constexpr (index >= sizeof...(Ts))
+      {
+        return;
+      }
+      else
+      {
+        std::get<index>(cown_tuple).fetch_cown_from_disk();
+        fetch_cowns<index + 1>(cown_tuple);
+      }
+    }
+
     template<size_t index = 0>
     void create_behaviour(BehaviourCore** barray)
     {
@@ -179,6 +204,10 @@ namespace verona::cpp
         auto&& w = std::get<index>(when_batch);
         // Add the behaviour here
         auto t = w.to_tuple();
+
+        auto& cown_tuple = w.cown_tuple;
+        fetch_cowns(cown_tuple);
+        
         barray[index] = Behaviour::prepare_to_schedule<
           typename std::remove_reference<decltype(std::get<2>(t))>::type>(
           std::move(std::get<0>(t)),

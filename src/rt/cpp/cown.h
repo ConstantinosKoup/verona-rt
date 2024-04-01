@@ -7,6 +7,7 @@
 #include <utility>
 #include <verona.h>
 
+#include "lambdabehaviour.h"
 namespace verona::cpp
 {
   using namespace verona::rt;
@@ -46,6 +47,10 @@ namespace verona::cpp
   private:
     T value;
 
+    // If we convert value to pointer we don't need this, or we can make value optional & atomic
+    // maybe doesn't need to be atomic, as cowns are atomic
+    std::atomic<bool> in_memory{true};
+
     template<typename... Args>
     ActualCown(Args&&... ts) : value(std::forward<Args>(ts)...)
     {}
@@ -58,6 +63,32 @@ namespace verona::cpp
 
     template<typename TT, typename... Args>
     friend cown_ptr<TT> make_cown(Args&&... ts);
+
+  public:
+    void fetch_from_disk() {
+      bool expected = false;
+      if (in_memory.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+      {
+        schedule_lambda(this, [this](){
+          Logging::cout() << "Fetching cown " << this << Logging::endl;
+        });
+      }
+    }
+
+    void swap_to_disk() {
+      bool expected = true;
+      if (in_memory.compare_exchange_strong(expected, false, std::memory_order_acq_rel))
+      {
+        schedule_lambda(this, [this](){
+          Logging::cout() << "Swapping cown " << this << Logging::endl;
+        });
+      }
+      else 
+      {
+        Logging::cout() << "Swapping cown " << this << " failed, cown already swapped" << Logging::endl;
+        exit(EXIT_FAILURE);
+      }
+    }
   };
 
   /**
@@ -231,7 +262,7 @@ namespace verona::cpp
     }
 
     void debug_write_to_disk() {
-      allocated_cown->debug_write_to_disk();
+      allocated_cown->swap_to_disk();
     }
 
     /**
