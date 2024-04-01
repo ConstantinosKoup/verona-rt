@@ -68,15 +68,34 @@ namespace verona::cpp
   public:
     void fetch_from_disk() {
       bool expected = false;
-      if (in_memory.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
+      if (in_memory.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+      {
         schedule_lambda(this, [this](){
           Logging::cout() << ">>>>>>>>>>>>>>>>>>>>>>>>>>>Fetching cown " << this << Logging::endl;
         });
+      } 
+      else 
+      {
+        Logging::cout() << ">>>>>>>>>>>>>>>>>>>>>>>>>>>Fetching cown " 
+                        << this << " failed, cown already in memory" << Logging::endl;
+        exit(EXIT_FAILURE);
       }
     }
 
-    void debug_write_to_disk() {
-      in_memory.store(false, std::memory_order_acq_rel);
+    void swap_to_disk() {
+      bool expected = true;
+      if (in_memory.compare_exchange_strong(expected, false, std::memory_order_acq_rel))
+      {
+        schedule_lambda(this, [this](){
+          Logging::cout() << ">>>>>>>>>>>>>>>>>>>>>>>>>>>Swapping cown " << this << Logging::endl;
+        });
+      }
+      else 
+      {
+        Logging::cout() << ">>>>>>>>>>>>>>>>>>>>>>>>>>>Swapping cown " 
+                        << this << " failed, cown already swapped" << Logging::endl;
+        exit(EXIT_FAILURE);
+      }
     }
   };
 
@@ -251,7 +270,7 @@ namespace verona::cpp
     }
 
     void debug_write_to_disk() {
-      allocated_cown->debug_write_to_disk();
+      allocated_cown->swap_to_disk();
     }
 
     /**
