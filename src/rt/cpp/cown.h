@@ -73,12 +73,6 @@ namespace verona::cpp
         schedule_lambda(this, [this](){
           Logging::cout() << ">>>>>>>>>>>>>>>>>>>>>>>>>>>Fetching cown " << this << Logging::endl;
         });
-      } 
-      else 
-      {
-        Logging::cout() << ">>>>>>>>>>>>>>>>>>>>>>>>>>>Fetching cown " 
-                        << this << " failed, cown already in memory" << Logging::endl;
-        exit(EXIT_FAILURE);
       }
     }
 
