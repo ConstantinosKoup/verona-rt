@@ -6,7 +6,6 @@
 #include <tuple>
 #include <utility>
 #include <verona.h>
-#include <fstream>
 
 #include "lambdabehaviour.h"
 namespace verona::cpp
@@ -71,7 +70,7 @@ namespace verona::cpp
       if (in_memory.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
       {
         schedule_lambda(this, [this](){
-          Logging::cout() << ">>>>>>>>>>>>>>>>>>>>>>>>>>>Fetching cown " << this << Logging::endl;
+          Logging::cout() << "Fetching cown " << this << Logging::endl;
         });
       }
     }
@@ -81,13 +80,12 @@ namespace verona::cpp
       if (in_memory.compare_exchange_strong(expected, false, std::memory_order_acq_rel))
       {
         schedule_lambda(this, [this](){
-          Logging::cout() << ">>>>>>>>>>>>>>>>>>>>>>>>>>>Swapping cown " << this << Logging::endl;
+          Logging::cout() << "Swapping cown " << this << Logging::endl;
         });
       }
       else 
       {
-        Logging::cout() << ">>>>>>>>>>>>>>>>>>>>>>>>>>>Swapping cown " 
-                        << this << " failed, cown already swapped" << Logging::endl;
+        Logging::cout() << "Swapping cown " << this << " failed, cown already swapped" << Logging::endl;
         exit(EXIT_FAILURE);
       }
     }

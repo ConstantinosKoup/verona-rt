@@ -99,7 +99,6 @@ namespace verona::rt
     template<typename T>
     friend class Promise;
     friend struct BehaviourCore;
-    friend struct Behaviour;
 
     template<typename T>
     friend class Noticeboard;

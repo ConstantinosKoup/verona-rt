@@ -107,7 +107,6 @@ namespace verona::rt
       for (size_t i = 0; i < count; i++)
       {
         auto* s = new (&slots[i]) Slot(requests[i].cown());
-        
         if (requests[i].is_move())
           s->set_move();
       }
