@@ -179,6 +179,20 @@ namespace verona::cpp
     template<typename... Args2>
     friend class Batch;
 
+    template<size_t index = 0, typename... Ts>
+    void fetch_cowns(std::tuple<Ts...>& cown_tuple)
+    {
+      if constexpr (index >= sizeof...(Ts))
+      {
+        return;
+      }
+      else
+      {
+        std::get<index>(cown_tuple).fetch_cown_from_disk();
+        fetch_cowns<index + 1>(cown_tuple);
+      }
+    }
+
     template<size_t index = 0>
     void create_behaviour(BehaviourCore** barray)
     {
@@ -193,17 +207,8 @@ namespace verona::cpp
         auto t = w.to_tuple();
 
         auto& cown_tuple = w.cown_tuple;
-
-        auto foo = [&cown_tuple](size_t cown_index){ 
-          auto& foo = std::get<0>(cown_tuple); 
-          foo.fetch_cown_from_disk();
-          auto bar = 3;
-        };
-
-        foo(3);
+        fetch_cowns(cown_tuple);
         
-        auto bar = 3;
-
         barray[index] = Behaviour::prepare_to_schedule<
           typename std::remove_reference<decltype(std::get<2>(t))>::type>(
           std::move(std::get<0>(t)),
