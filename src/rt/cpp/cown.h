@@ -6,6 +6,7 @@
 #include <tuple>
 #include <utility>
 #include <verona.h>
+
 namespace verona::cpp
 {
   using namespace verona::rt;
@@ -44,10 +45,6 @@ namespace verona::cpp
   {
   private:
     T value;
-
-    // If we convert value to pointer we don't need this, or we can make value optional & atomic
-    // maybe doesn't need to be atomic, as cowns are atomic
-    std::atomic<bool> in_memory{true};
 
     template<typename... Args>
     ActualCown(Args&&... ts) : value(std::forward<Args>(ts)...)

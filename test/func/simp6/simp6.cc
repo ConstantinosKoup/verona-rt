@@ -33,7 +33,7 @@ void test_body()
   when(log4, log1) <<
     [=](auto, auto) { Logging::cout() << "log4" << Logging::endl; };
 }
- 
+
 int main(int argc, char** argv)
 {
   SystematicTestHarness harness(argc, argv);
