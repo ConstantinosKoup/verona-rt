@@ -5,6 +5,8 @@
 #include <cpp/when.h>
 #include <debug/harness.h>
 
+#include <iostream>
+
 class Body
 {
 private:
@@ -16,7 +18,18 @@ public:
   }
 
   const char *get_message() {
-    return message.append(std::to_string(_num)).c_str();
+    return (message + std::to_string(_num)).c_str();
+  }
+
+    static void save(std::ofstream& file, Body *body) {
+    file.write(reinterpret_cast<const char *>(&body->_num), sizeof(body->_num));
+  }
+
+  static Body *load(std::ifstream& file) {
+    size_t num;
+    file.read (reinterpret_cast<char *>(&num), sizeof(num));
+
+    return new Body(num);
   }
 
   ~Body()

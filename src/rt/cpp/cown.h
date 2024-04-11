@@ -34,6 +34,14 @@ namespace verona::cpp
   template<typename T>
   class cown_ptr;
 
+  enum SwapStatus {
+    IN_MEMORY,
+    FETCHING,
+    DO_NOT_SWAP,
+    SWAPPING,
+    ON_DISK,
+  };
+
   /**
    * Internal Verona runtime cown for the type T.
    *
@@ -45,6 +53,7 @@ namespace verona::cpp
   {
   private:
     T value;
+    std::atomic<SwapStatus> swapped{SwapStatus::IN_MEMORY};
 
     template<typename... Args>
     ActualCown(Args&&... ts) : value(std::forward<Args>(ts)...)

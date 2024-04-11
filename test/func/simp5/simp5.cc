@@ -28,7 +28,11 @@ void test_body()
   when(log2, log3) <<
     [=](auto, auto) { Logging::cout() << "log2" << Logging::endl; };
   when(log1, log3) <<
-    [=](auto, auto) { Logging::cout() << "log3" << Logging::endl; };
+    [=](auto, auto) 
+    { 
+      Logging::cout() << "log3" << Logging::endl;
+      when(log2) << [=](auto) { Logging::cout() << "log4" << Logging::endl; };
+    };
 }
 
 int main(int argc, char** argv)

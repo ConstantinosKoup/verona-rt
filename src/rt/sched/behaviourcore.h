@@ -590,6 +590,8 @@ namespace verona::rt
         return;
       }
 
+      Logging::cout() << ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> buongiorno " << cown << Logging::endl;
+
       yield();
 
       // If we failed, then the another thread is extending the chain

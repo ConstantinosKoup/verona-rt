@@ -80,6 +80,9 @@ namespace verona::cpp
           std::move(std::get<0>(t)),
           std::move(std::get<1>(t)),
           std::move(std::get<2>(t)));
+
+        CownSwapper::allow_cowns_to_swap(w.cown_tuple);
+
         create_behaviour<index + 1>(barray);
       }
     }
