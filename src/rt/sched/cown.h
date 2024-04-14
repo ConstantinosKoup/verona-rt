@@ -88,6 +88,13 @@ namespace verona::rt
 
   struct Slot;
 
+  enum SwapStatus {
+    IN_MEMORY,
+    // FETCHING,
+    // SWAPPING,
+    ON_DISK,
+  };
+
   class Cown : public Shared
   {
   public:
@@ -99,11 +106,13 @@ namespace verona::rt
     template<typename T>
     friend class Promise;
     friend struct BehaviourCore;
+    friend class CownSwapper;
 
     template<typename T>
     friend class Noticeboard;
 
     std::atomic<Slot*> last_slot{nullptr};
+    std::atomic<SwapStatus> swapped{SwapStatus::IN_MEMORY};
 
     /*
      * Cown's read ref count.

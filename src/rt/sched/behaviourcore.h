@@ -5,6 +5,7 @@
 #include "../ds/stackarray.h"
 #include "../object/object.h"
 #include "cown.h"
+#include "cown_swapper.h"
 
 #include <snmalloc/snmalloc.h>
 
@@ -355,6 +356,7 @@ namespace verona::rt
      *
      * and mark (a (1)) as not having a successor.
      */
+    template<bool is_swap_behaviour = false>
     static void schedule_many(BehaviourCore** bodies, size_t body_count)
     {
       Logging::cout() << "BehaviourCore::schedule_many" << body_count
@@ -589,8 +591,6 @@ namespace verona::rt
         shared::release(ThreadAlloc::get(), cown);
         return;
       }
-
-      Logging::cout() << ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> buongiorno " << cown << Logging::endl;
 
       yield();
 
