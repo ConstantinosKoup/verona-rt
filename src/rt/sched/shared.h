@@ -61,7 +61,6 @@ namespace verona::rt
       }
 
       if (!last)
-      // swap here
         return;
 
       // All paths from this point must release the weak count owned by the

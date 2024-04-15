@@ -42,9 +42,9 @@ namespace verona::rt
     }
 
     template<typename Be, typename T>
-    static Behaviour* make(size_t count, T&& f)
+    static Behaviour* make(size_t count, T&& f, bool is_swap = false)
     {
-      auto behaviour_core = BehaviourCore::make(count, invoke<Be>, sizeof(Be));
+      auto behaviour_core = BehaviourCore::make(count, invoke<Be>, sizeof(Be), is_swap);
 
       new (behaviour_core->get_body()) Be(std::forward<T>(f));
 
@@ -91,9 +91,9 @@ namespace verona::rt
 
     template<typename T>
     static Behaviour*
-    prepare_to_schedule(size_t count, Request* requests, T&& f)
+    prepare_to_schedule(size_t count, Request* requests, T&& f, bool is_swap = false)
     {
-      auto body = Behaviour::make<T>(count, std::forward<T>(f));
+      auto body = Behaviour::make<T>(count, std::forward<T>(f), is_swap);
 
       auto* slots = body->get_slots();
       for (size_t i = 0; i < count; i++)

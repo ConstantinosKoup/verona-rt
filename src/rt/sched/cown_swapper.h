@@ -1,11 +1,13 @@
 #pragma once
 
 #include "cown.h"
+#include "work.h"
 
 #include <type_traits>
 #include <fstream>
 #include <filesystem>
 #include <sstream>
+#include <optional>
 
 namespace verona::rt
 {
@@ -29,6 +31,22 @@ namespace verona::rt
     : std::true_type
     {};
 
+    class Behaviour;
+
+    static void kalimera(Work *)
+    {
+        Logging::cout() << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<Fetching cown " << Logging::endl;
+
+        // using BaseT = std::remove_pointer_t<T>;
+
+        // auto cown_dir = get_cown_dir();
+        // std::stringstream filename;
+        // filename << cown << ".cown";
+        // std::ifstream ifs(cown_dir / filename.str(), std::ios::in | std::ios::binary);
+        // cown->value = BaseT::load(ifs);
+        // ifs.close();
+    };
+
     class CownSwapper {
     private:
         // Should use concepts if we move to C++ 20.
@@ -43,6 +61,7 @@ namespace verona::rt
             return has_save<BaseT>::value && has_load<BaseT>::value;
         }
 
+    public:
         static std::filesystem::path get_cown_dir()
         {
             namespace fs = std::filesystem;
@@ -54,58 +73,87 @@ namespace verona::rt
 
             return cown_dir;
         }
-    
-    public:
-        static void fetch_cown_from_disk(Cown *cown)
+        
+        static Work *get_fetch_work(Cown *cown)
         {
             // if constexpr (is_swappable<typeof(cown->value)>())
             // {
                 auto expected = ON_DISK;
-                cown->swapped.compare_exchange_strong(expected, SwapStatus::IN_MEMORY, std::memory_order_acquire);
+                if (! cown->swapped.compare_exchange_strong(expected, SwapStatus::IN_MEMORY, std::memory_order_acquire))
+                    return nullptr;
 
                 Logging::cout() << "Scheduling fetch for cown " << cown << Logging::endl;
-                schedule_lambda(cown, [cown]()
+                auto fetch_lambda = [cown]()
                 {
-                    Logging::cout() << "Fetching cown " << cown << Logging::endl;
+                    Logging::cout() << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<Fetching cown " << Logging::endl;
 
                     // using BaseT = std::remove_pointer_t<T>;
 
                     auto cown_dir = get_cown_dir();
                     std::stringstream filename;
-                    filename << cown << ".cown";
-                    std::ifstream ifs(cown_dir / filename.str(), std::ios::in | std::ios::binary);
+                    // filename << cown << ".cown";
+                    // std::ifstream ifs(cown_dir / filename.str(), std::ios::in | std::ios::binary);
                     // cown->value = BaseT::load(ifs);
-                    ifs.close();
-                });
+                    // ifs.close();
+                };
+
+                return Closure::make([f = std::forward<typeof(fetch_lambda)>(fetch_lambda)](Work* w) mutable {
+                            f();
+                            return true;
+                        });
             // }
+            return nullptr;
         }
 
-        // static void swap_to_disk(Cown *cown)
-        // {
-        //     // if constexpr (is_swappable<typeof(cown->value)>())
-        //     // {
-        //         auto expected = SwapStatus::IN_MEMORY;
-        //         if (cown->swapped.compare_exchange_strong(expected, SwapStatus::ON_DISK, std::memory_order_acq_rel))
-        //         {
-        //             auto swap_function = [cown]()
-        //             {
-        //                 Logging::cout() << "Swapping cown " << cown << Logging::endl;
+        static auto get_fetch_lambda(Cown *cown, bool& should_fetch)
+        {
+            auto fetch_lambda = [cown]()
+            {
+                Logging::cout() << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<Fetching cown " << cown << Logging::endl;
 
-        //                 // using BaseT = std::remove_pointer_t<T>;
+                // using BaseT = std::remove_pointer_t<T>;
 
-        //                 auto cown_dir = get_cown_dir();
-        //                 std::stringstream filename;
-        //                 filename << cown << ".cown";
-        //                 std::ofstream ofs(cown_dir / filename.str(), std::ios::out | std::ios::binary);
-        //                 // BaseT::save(ofs, cown->value);
-        //                 ofs.close();
+                auto cown_dir = get_cown_dir();
+                std::stringstream filename;
+                // filename << cown << ".cown";
+                // std::ifstream ifs(cown_dir / filename.str(), std::ios::in | std::ios::binary);
+                // cown->value = BaseT::load(ifs);
+                // ifs.close();
+            };
+            // auto foo = Behaviour::make<decltype(fetch_lambda)>(1, fetch_lambda);
 
-        //                 // T value_to_delete = cown->value;
-        //                 // delete value_to_delete;
-        //             };
-        //         }
-        //     // }
-        // }
+            should_fetch = false;
+            auto expected = ON_DISK;
+            if (cown->swapped.compare_exchange_strong(expected, SwapStatus::IN_MEMORY, std::memory_order_acquire))
+            {
+                Logging::cout() << "Scheduling fetch for cown " << cown << Logging::endl;
+                should_fetch = true;
+            }
+            return fetch_lambda;
+        }
+
+        static auto get_fetch_function(Cown *cown, bool& should_fetch)
+        {
+            // if constexpr (is_swappable<typeof(cown->value)>())
+            // {
+                should_fetch = false;
+                auto expected = ON_DISK;
+                if (cown->swapped.compare_exchange_strong(expected, SwapStatus::IN_MEMORY, std::memory_order_acquire))
+                {
+                    Logging::cout() << "Scheduling fetch for cown " << cown << Logging::endl;
+                    should_fetch = true;
+                }
+                return &kalimera;
+        }
+
+        static bool swap_to_disk(Cown *cown)
+        {
+            // if constexpr (is_swappable<typeof(cown->value)>())
+            // {
+                auto expected = SwapStatus::IN_MEMORY;
+                return cown->swapped.compare_exchange_strong(expected, SwapStatus::ON_DISK, std::memory_order_acq_rel);
+            // }
+        }
 
     };
 
