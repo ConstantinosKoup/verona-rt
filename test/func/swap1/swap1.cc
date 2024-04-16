@@ -48,7 +48,7 @@ void test_body()
   auto log = make_cown<Body*>(new Body("Cown Message"));
   ActualCownSwapper::schedule_swap(log);
 
-  when(log) << [=](auto b) { Logging::cout() << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<< Printing message: " << b.get_ref()->get_message() << Logging::endl; };
+  when(log) << [=](auto b) { Logging::cout() << "Printing message: " << b.get_ref()->get_message() << Logging::endl; };
 }
 
 int main(int argc, char** argv)
