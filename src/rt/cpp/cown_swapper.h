@@ -1,101 +1,53 @@
 #pragma once
 
 #include "cown.h"
-#include "access.h"
+#include "../sched/behaviour.h"
+#include "../sched/cown_swapper.h"
 
 #include <verona.h>
-#include <type_traits>
+#include <fstream>
+#include <filesystem>
+#include <sstream>
+
 namespace verona::cpp
 {
     using namespace verona::rt;
 
-    class CownSwapper {
+    class ActualCownSwapper {
     private:
         template<typename T>
-        static constexpr bool is_swappable()
+        static void schedule_swap_lambda(Cown* cown, T&& f)
         {
-            return std::is_pointer_v<T>;
+            Logging::cout() << "Scheduling swap for cown " << cown << Logging::endl;
+            Request requests[] = {Request::write(cown)};
+            BehaviourCore *b = 
+                Behaviour::prepare_to_schedule<T>(1, requests, std::forward<T>(f), /* is_swap */ true);
+            
+            BehaviourCore *arr[] = {b};
+            BehaviourCore::schedule_many(arr, 1);
         }
-
-        template<typename T>
-        static void fetch_actual_cown(ActualCown<T> *cown)
-        {
-            if (cown->value == nullptr)
-            {
-                //good code
-                cown->value = reinterpret_cast<T>(0xdeadbeef);
-
-                schedule_lambda(cown, [cown](){
-                    Logging::cout() << "Fetching cown " << cown << Logging::endl;
-                });
-            }
-        }
-
-        template<typename T>
-        static void fetch_access_cowns(Access<T>& access)
-        {
-            if constexpr (is_swappable<T>())
-            {
-                fetch_actual_cown<T>(access.t);
-            }
-        }
-
-        template<typename T>
-        static void fetch_access_cowns(AccessBatch<T>& access_batch)
-        {
-            if constexpr (is_swappable<T>())
-            {
-                for (size_t i = 0; i < access_batch.arr_len; i++)
-                {
-                    fetch_actual_cown<T>(access_batch.act_array[i]);
-                }
-            }
-        }
-
-        template<size_t index = 0, typename... Ts>
-        static void fetch_tuple_cowns(std::tuple<Ts...>& cown_tuple)
-        {
-            if constexpr (index >= sizeof...(Ts))
-            {
-                return;
-            }
-            else
-            {
-                fetch_access_cowns(std::get<index>(cown_tuple));
-                fetch_tuple_cowns<index + 1>(cown_tuple);
-            }
-        }
-    
     public:
-        template<typename... Ts>
-        static void fetch_cowns_from_disk(std::tuple<Ts...>& cown_tuple)
-        {
-            fetch_tuple_cowns(cown_tuple);
-        }
-
         template<typename T>
-        static void swap_to_disk(cown_ptr<T>& cown_ptr)
+        static void schedule_swap(cown_ptr<T>& cown_ptr)
         {
-            if constexpr (is_swappable<T>())
+            ActualCown<T>* cown = cown_ptr.allocated_cown;
+            schedule_swap_lambda(cown, [cown]()
             {
-                ActualCown<T>* cown = cown_ptr.allocated_cown;
-                if (cown->value != nullptr)
-                {
-                    auto value = cown->value;
-                    cown->value = nullptr;
+                Logging::cout() << "Swapping cown " << cown << Logging::endl;
 
-                    schedule_lambda(cown, [cown, value](){
-                        Logging::cout() << "Swapping cown " << cown << Logging::endl;
-                    });
-                }
-                else 
-                {
-                    Logging::cout() << "Swapping cown " << cown << " failed, cown already swapped" << Logging::endl;
-                    exit(EXIT_FAILURE);
-                }
-            }
+                using BaseT = std::remove_pointer_t<T>;
+
+                auto cown_dir = CownSwapper::get_cown_dir();
+                std::stringstream filename;
+                filename << cown << ".cown";
+                std::ofstream ofs(cown_dir / filename.str(), std::ios::out | std::ios::binary);
+                // BaseT::save(ofs, cown->value);
+                ofs.close();
+
+                // T value_to_delete = cown->value;
+                // delete value_to_delete;
+            });
         }
-
     };
 
-} // namespace verona::rt
+} // namespace verona::cpp

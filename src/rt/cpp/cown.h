@@ -59,7 +59,7 @@ namespace verona::cpp
     template<typename TT, typename... Args>
     friend cown_ptr<TT> make_cown(Args&&... ts);
 
-    friend class CownSwapper;
+    friend class ActualCownSwapper;
   };
 
   /**
@@ -197,6 +197,8 @@ namespace verona::cpp
 
     template<typename TT>
     friend class AccessBatch;
+
+    friend class ActualCownSwapper;
 
     /**
      * Internal Verona runtime cown for this type.

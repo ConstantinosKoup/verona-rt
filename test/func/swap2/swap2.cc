@@ -1,9 +1,11 @@
-// Copyright Microsoft and Project Verona Contributors.
-// SPDX-License-Identifier: MIT
+// // Copyright Microsoft and Project Verona Contributors.
+// // SPDX-License-Identifier: MIT
 
 #include <cpp/cown_swapper.h>
 #include <cpp/when.h>
 #include <debug/harness.h>
+
+#include <iostream>
 
 class Body
 {
@@ -16,7 +18,18 @@ public:
   }
 
   const char *get_message() {
-    return message.append(std::to_string(_num)).c_str();
+    return (message + std::to_string(_num)).c_str();
+  }
+
+    static void save(std::ofstream& file, Body *body) {
+    file.write(reinterpret_cast<const char *>(&body->_num), sizeof(body->_num));
+  }
+
+  static Body *load(std::ifstream& file) {
+    size_t num;
+    file.read (reinterpret_cast<char *>(&num), sizeof(num));
+
+    return new Body(num);
   }
 
   ~Body()
@@ -36,8 +49,8 @@ void test_body()
   auto log3 = make_cown<Body*>(new Body(3));
   auto log4 = make_cown<Body*>(new Body(4));
 
-  CownSwapper::swap_to_disk(log3);
-  CownSwapper::swap_to_disk(log4);
+  ActualCownSwapper::schedule_swap(log3);
+  ActualCownSwapper::schedule_swap(log4);
 
   when(log1, log2) <<
     [=](auto b1, auto b2) { Logging::cout() << b1.get_ref()->get_message() << ", " << b2.get_ref()->get_message() << Logging::endl; };

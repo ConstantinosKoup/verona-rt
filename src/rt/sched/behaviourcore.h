@@ -5,6 +5,7 @@
 #include "../ds/stackarray.h"
 #include "../object/object.h"
 #include "cown.h"
+#include "cown_swapper.h"
 
 #include <snmalloc/snmalloc.h>
 
@@ -153,6 +154,7 @@ namespace verona::rt
   {
     std::atomic<size_t> exec_count_down;
     size_t count;
+    const bool is_swap_behaviour;
 
     /**
      * @brief Construct a new Behaviour object
@@ -165,7 +167,11 @@ namespace verona::rt
      * slots. Two phase locking needs to complete before we can execute the
      * behaviour.
      */
-    BehaviourCore(size_t count) : exec_count_down(count + 1), count(count) {}
+    BehaviourCore(size_t count, bool is_swap_behaviour = false) :
+      exec_count_down(count + 1),
+      count(count), 
+      is_swap_behaviour(is_swap_behaviour)
+      {}
 
     Work* as_work()
     {
@@ -183,6 +189,21 @@ namespace verona::rt
     static BehaviourCore* from_work(Work* w)
     {
       return pointer_offset<BehaviourCore>(w, sizeof(Work));
+    }
+
+    template<typename Be>
+    static void invoke(Work* work)
+    {
+      // Dispatch to the body of the behaviour.
+      BehaviourCore* behaviour = BehaviourCore::from_work(work);
+      Be* body = behaviour->get_body<Be>();
+      (*body)();
+
+      behaviour->release_all();
+
+      // Dealloc behaviour
+      body->~Be();
+      work->dealloc();
     }
 
     /**
@@ -225,7 +246,7 @@ namespace verona::rt
      * @param payload - The size of the payload to allocate.
      * @return BehaviourCore* - the pointer to the behaviour object.
      */
-    static BehaviourCore* make(size_t count, void (*f)(Work*), size_t payload)
+    static BehaviourCore* make(size_t count, void (*f)(Work*), size_t payload, bool is_swap = false)
     {
       // Manual memory layout of the behaviour structure.
       //   | Work | Behaviour | Slot ... Slot | Body |
@@ -235,7 +256,7 @@ namespace verona::rt
 
       Work* work = new (base) Work(f);
       void* base_behaviour = from_work(work);
-      BehaviourCore* behaviour = new (base_behaviour) BehaviourCore(count);
+      BehaviourCore* behaviour = new (base_behaviour) BehaviourCore(count, is_swap);
 
       // These assertions are basically checking that we won't break any
       // alignment assumptions on Be.  If we add some actual alignment, then
@@ -371,12 +392,16 @@ namespace verona::rt
       StackArray<size_t> ec(body_count);
       for (size_t i = 0; i < body_count; i++)
         ec[i] = 1;
+      StackArray<size_t> fetch_ec(count);
+      for (size_t i = 0; i < count; i++)
+        fetch_ec[i] = 1;
 
       // Need to sort the cown requests across the co-scheduled collection of
       // cowns We first construct an array that represents pairs of behaviour
       // number and slot pointer. Note: Really want a dynamically sized stack
       // allocation here.
       StackArray<std::tuple<size_t, Slot*>> indexes(count);
+      StackArray<BehaviourCore*> fetches(count);
       size_t idx = 0;
       for (size_t i = 0; i < body_count; i++)
       {
@@ -385,6 +410,7 @@ namespace verona::rt
         {
           std::get<0>(indexes[idx]) = i;
           std::get<1>(indexes[idx]) = &slots[j];
+          fetches[idx] = nullptr;
           idx++;
         }
       }
@@ -424,6 +450,39 @@ namespace verona::rt
         // The number of RCs provided for the current cown by the when.
         // I.e. how many moves of cown_refs there were.
         size_t transfer_count = last_slot->status;
+
+        bool fetched = false;
+        if (body->is_swap_behaviour)
+        {
+          if (! CownSwapper::swap_to_disk(cown)) {
+            ++i;
+            continue;
+          }
+        }
+        else
+        {
+          // auto fetch_work = CownSwapper::get_fetch_work(cown);
+          // if (fetch_work != nullptr)
+
+          bool should_fetch;
+          auto fetch_lambda = CownSwapper::get_fetch_lambda(cown, should_fetch);
+          if (should_fetch)
+          {
+            // void* base_behaviour = from_work(fetch_work);
+            // fetches[i] = new (base_behaviour) BehaviourCore(1);
+
+            fetches[i] = BehaviourCore::make(1, invoke<decltype(fetch_lambda)>, sizeof(fetch_lambda));
+            new (fetches[i]->get_body()) decltype(fetch_lambda)(std::forward<decltype(fetch_lambda)>(fetch_lambda));
+
+            auto slots = fetches[i]->get_slots();
+            auto *s = new (&slots[0]) Slot(cown);
+
+            transfer_count += s->status;
+            s->set_behaviour(body);
+            first_body = fetches[i];
+            fetched = true;
+          }
+        }
 
         // Detect duplicates for this cown.
         // This is required in two cases:
@@ -469,7 +528,10 @@ namespace verona::rt
           Logging::cout() << "Acquired cown: " << cown << " for behaviour "
                           << body << Logging::endl;
 
-          ec[std::get<0>(indexes[first_chain_index])]++;
+          if (fetched)
+            fetch_ec[first_chain_index]++;
+          else
+            ec[std::get<0>(indexes[first_chain_index])]++;
 
           yield();
 
@@ -522,6 +584,13 @@ namespace verona::rt
       }
       for (size_t i = 0; i < count; i++)
       {
+        if (fetches[i] != nullptr)
+        {
+          fetches[i]->resolve(fetch_ec[i]);
+          auto slot = fetches[i]->get_slots();
+          if (slot->is_wait())
+            slot->set_ready();
+        }
         yield();
         auto slot = std::get<1>(indexes[i]);
         Logging::cout() << "Setting slot " << slot << " to ready"
