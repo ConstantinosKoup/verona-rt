@@ -64,7 +64,7 @@ namespace verona::rt
         {
             auto fetch_lambda = [cown]()
             {
-                Logging::cout() << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<Fetching cown " << cown << Logging::endl;
+                Logging::cout() << "Fetching cown " << cown << Logging::endl;
 
                 // using BaseT = std::remove_pointer_t<T>;
 
