@@ -33,20 +33,6 @@ namespace verona::rt
 
     class Behaviour;
 
-    static void kalimera(Work *)
-    {
-        Logging::cout() << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<Fetching cown " << Logging::endl;
-
-        // using BaseT = std::remove_pointer_t<T>;
-
-        // auto cown_dir = get_cown_dir();
-        // std::stringstream filename;
-        // filename << cown << ".cown";
-        // std::ifstream ifs(cown_dir / filename.str(), std::ios::in | std::ios::binary);
-        // cown->value = BaseT::load(ifs);
-        // ifs.close();
-    };
-
     class CownSwapper {
     private:
         // Should use concepts if we move to C++ 20.
@@ -72,37 +58,6 @@ namespace verona::rt
             fs::permissions(cown_dir, fs::perms::owner_all);
 
             return cown_dir;
-        }
-        
-        static Work *get_fetch_work(Cown *cown)
-        {
-            // if constexpr (is_swappable<typeof(cown->value)>())
-            // {
-                auto expected = ON_DISK;
-                if (! cown->swapped.compare_exchange_strong(expected, SwapStatus::IN_MEMORY, std::memory_order_acquire))
-                    return nullptr;
-
-                Logging::cout() << "Scheduling fetch for cown " << cown << Logging::endl;
-                auto fetch_lambda = [cown]()
-                {
-                    Logging::cout() << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<Fetching cown " << Logging::endl;
-
-                    // using BaseT = std::remove_pointer_t<T>;
-
-                    auto cown_dir = get_cown_dir();
-                    std::stringstream filename;
-                    // filename << cown << ".cown";
-                    // std::ifstream ifs(cown_dir / filename.str(), std::ios::in | std::ios::binary);
-                    // cown->value = BaseT::load(ifs);
-                    // ifs.close();
-                };
-
-                return Closure::make([f = std::forward<typeof(fetch_lambda)>(fetch_lambda)](Work* w) mutable {
-                            f();
-                            return true;
-                        });
-            // }
-            return nullptr;
         }
 
         static auto get_fetch_lambda(Cown *cown, bool& should_fetch)
@@ -130,20 +85,6 @@ namespace verona::rt
                 should_fetch = true;
             }
             return fetch_lambda;
-        }
-
-        static auto get_fetch_function(Cown *cown, bool& should_fetch)
-        {
-            // if constexpr (is_swappable<typeof(cown->value)>())
-            // {
-                should_fetch = false;
-                auto expected = ON_DISK;
-                if (cown->swapped.compare_exchange_strong(expected, SwapStatus::IN_MEMORY, std::memory_order_acquire))
-                {
-                    Logging::cout() << "Scheduling fetch for cown " << cown << Logging::endl;
-                    should_fetch = true;
-                }
-                return &kalimera;
         }
 
         static bool swap_to_disk(Cown *cown)
