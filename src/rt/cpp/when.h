@@ -5,6 +5,8 @@
 #include "../sched/behaviour.h"
 #include "cown.h"
 #include "cown_array.h"
+#include "access.h"
+#include "cown_swapper.h"
 
 #include <functional>
 #include <tuple>
@@ -179,6 +181,7 @@ namespace verona::cpp
         auto&& w = std::get<index>(when_batch);
         // Add the behaviour here
         auto t = w.to_tuple();
+
         barray[index] = Behaviour::prepare_to_schedule<
           typename std::remove_reference<decltype(std::get<2>(t))>::type>(
           std::move(std::get<0>(t)),
@@ -485,12 +488,6 @@ namespace verona::cpp
       }
     }
   };
-
-  /**
-   * Template deduction guide for Access.
-   */
-  template<typename T>
-  Access(const cown_ptr<T>&) -> Access<T>;
 
   /**
    * Template deduction guide for Batch.

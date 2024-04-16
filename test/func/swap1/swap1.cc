@@ -49,6 +49,7 @@ void test_body()
   ActualCownSwapper::schedule_swap(log);
 
   when(log) << [=](auto b) { Logging::cout() << "Printing message: " << b.get_ref()->get_message() << Logging::endl; };
+
 }
 
 int main(int argc, char** argv)
