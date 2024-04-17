@@ -50,13 +50,12 @@ namespace verona::cpp
     ActualCown(Args&&... ts) : value(std::forward<Args>(ts)...)
     {}
 
-    template<class TT, class = void>
+    template<typename TT, class = void>
     struct has_serialize
     : std::false_type
     {};
-
-    template<class TT>
-    struct has_serialize<TT, std::enable_if_t<std::is_same_v<std::add_pointer_t<TT>(std::add_pointer_t<std::add_const_t<TT>>, std::iostream&), decltype(TT::serialize)>>>
+    template<typename TT>
+    struct has_serialize<TT, std::enable_if_t<std::is_same_v<T(T, std::iostream&), decltype(TT::serialize)>>>
     : std::true_type
     {};
 
@@ -71,32 +70,24 @@ namespace verona::cpp
 
     friend class ActualCownSwapper;
 
+    using BaseT = std::remove_pointer_t<T>;
   public:
-    static constexpr bool is_serializable()
+    struct is_serializable
     {
-        if(!std::is_pointer_v<T>)
-            return false;
-
-        using BaseT = std::remove_pointer_t<T>;
-
-        return has_serialize<BaseT>::value;
-    }
+      constexpr static bool value = std::is_pointer_v<T> && has_serialize<BaseT>::value;
+    };
 
     void serialize(std::iostream& archive)
     {
-      if constexpr (is_serializable())
+      if constexpr (is_serializable::value)
       {
-        using BaseT = std::remove_pointer_t<T>;
-
         T new_value = BaseT::serialize(value, archive);
         
         if (value != nullptr)
-        {
           delete value;
-        }
+          
         value = new_value;
       }
-
     }
   };
 

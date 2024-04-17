@@ -18,7 +18,7 @@ public:
     return message.c_str();
   }
 
-  static Body *serialize(const Body* body, std::iostream& archive)
+  static Body *serialize(Body* body, std::iostream& archive)
   {
     if (body == nullptr)
     {
