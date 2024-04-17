@@ -21,15 +21,17 @@ public:
     return (message + std::to_string(_num)).c_str();
   }
 
-    static void save(std::ofstream& file, Body *body) {
-    file.write(reinterpret_cast<const char *>(&body->_num), sizeof(body->_num));
-  }
+  static Body *serialize(Body *body, std::iostream& archive)
+  {
+    if (body == nullptr)
+    {
+      size_t num;
+      archive.read (reinterpret_cast<char *>(&num), sizeof(num));
+      return new Body(num);
+    }
 
-  static Body *load(std::ifstream& file) {
-    size_t num;
-    file.read (reinterpret_cast<char *>(&num), sizeof(num));
-
-    return new Body(num);
+    archive.write(reinterpret_cast<const char *>(&body->_num), sizeof(body->_num));
+    return nullptr;
   }
 
   ~Body()

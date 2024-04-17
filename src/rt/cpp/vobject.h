@@ -41,6 +41,15 @@ namespace verona::rt
     constexpr static bool value = !std::is_trivially_destructible_v<T>;
   };
 
+  template<class T, class = void, class = void>
+  struct has_serializer : std::false_type
+  {};
+  template<class T>
+  struct has_serializer<T, std::void_t<decltype(&T::serialize)>, std::void_t<decltype(&T::is_serializable)>>
+  {
+    constexpr static bool value = T::is_serializable::value;
+  };
+
   /**
    * Common base class for V and VCown to build descriptors
    * from C++ objects using compile time reflection.
@@ -83,6 +92,17 @@ namespace verona::rt
 
     void trace(ObjectStack&) {}
 
+    static void gc_serialize(Object *o, std::iostream& archive)
+    {
+      if constexpr (has_serializer<T>::value)
+        ((T*)o)->serialize(archive); 
+      else
+      {
+        UNUSED(o);
+        UNUSED(archive);
+      }
+    }
+
   public:
     VBase() : Base() {}
 
@@ -93,7 +113,8 @@ namespace verona::rt
         gc_trace,
         has_finaliser<T>::value ? gc_final : nullptr,
         has_notified<T>::value ? gc_notified : nullptr,
-        has_destructor<T>::value ? gc_destructor : nullptr};
+        has_destructor<T>::value ? gc_destructor : nullptr,
+        has_serializer<T>::value ? gc_serialize : nullptr};
 
       return &desc;
     }

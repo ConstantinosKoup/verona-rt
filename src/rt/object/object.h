@@ -102,11 +102,14 @@ namespace verona::rt
 
     using DestructorFunction = void (*)(Object* o);
 
+    using SerializeFunction = void (*)(Object *o, std::iostream& archive);
+
     size_t size;
     TraceFunction trace;
     FinalFunction finaliser;
     NotifiedFunction notified = nullptr;
     DestructorFunction destructor = nullptr;
+    SerializeFunction serializer = nullptr;
     // TODO: virtual dispatch, pattern matching on type, reflection
   };
 
@@ -390,6 +393,7 @@ namespace verona::rt
 
   private:
     friend class Cown;
+    friend class CownSwapper;
     friend class Shared;
     friend void notify(Cown*);
     friend class Immutable;
@@ -821,6 +825,11 @@ namespace verona::rt
       return get_descriptor()->destructor != nullptr;
     }
 
+    inline bool has_serializer()
+    {
+      return get_descriptor()->serializer != nullptr;
+    }
+
     static inline bool is_trivial(const Descriptor* desc)
     {
       return desc->destructor == nullptr && desc->finaliser == nullptr;
@@ -861,6 +870,12 @@ namespace verona::rt
     {
       if (has_destructor())
         get_descriptor()->destructor(this);
+    }
+
+    inline void serialize(std::iostream& archive)
+    {
+      if (has_serializer())
+        get_descriptor()->serializer(this, archive);
     }
 
     inline void dealloc(Alloc& alloc)

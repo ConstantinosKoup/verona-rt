@@ -34,18 +34,14 @@ namespace verona::cpp
             schedule_swap_lambda(cown, [cown]()
             {
                 Logging::cout() << "Swapping cown " << cown << Logging::endl;
-
-                using BaseT = std::remove_pointer_t<T>;
-
                 auto cown_dir = CownSwapper::get_cown_dir();
                 std::stringstream filename;
                 filename << cown << ".cown";
-                std::ofstream ofs(cown_dir / filename.str(), std::ios::out | std::ios::binary);
-                // BaseT::save(ofs, cown->value);
-                ofs.close();
+                std::fstream ofs(cown_dir / filename.str(), std::ios::out | std::ios::binary);
+                
+                cown->serialize(ofs);
 
-                // T value_to_delete = cown->value;
-                // delete value_to_delete;
+                ofs.close();
             });
         }
     };
