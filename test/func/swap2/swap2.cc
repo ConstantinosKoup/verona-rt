@@ -21,20 +21,17 @@ public:
     return (message + std::to_string(_num)).c_str();
   }
 
-  static void serialize(Body*& body, std::iostream& archive)
+  static Body *serialize(const Body *body, std::iostream& archive)
   {
     if (body == nullptr)
     {
       size_t num;
       archive.read (reinterpret_cast<char *>(&num), sizeof(num));
-      body = new Body(num);
+      return new Body(num);
     }
-    else
-    {
-      archive.write(reinterpret_cast<const char *>(&body->_num), sizeof(body->_num));
-      delete body;
-      body = nullptr;
-    }
+
+    archive.write(reinterpret_cast<const char *>(&body->_num), sizeof(body->_num));
+    return nullptr;
   }
 
   ~Body()

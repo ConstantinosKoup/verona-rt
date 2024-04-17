@@ -56,7 +56,7 @@ namespace verona::cpp
     {};
 
     template<class TT>
-    struct has_serialize<TT, std::enable_if_t<std::is_same_v<void(T&, std::iostream&), decltype(TT::serialize)>>>
+    struct has_serialize<TT, std::enable_if_t<std::is_same_v<std::add_pointer_t<TT>(std::add_pointer_t<std::add_const_t<TT>>, std::iostream&), decltype(TT::serialize)>>>
     : std::true_type
     {};
 
@@ -88,7 +88,13 @@ namespace verona::cpp
       {
         using BaseT = std::remove_pointer_t<T>;
 
-        BaseT::serialize(value, archive);
+        T new_value = BaseT::serialize(value, archive);
+        
+        if (value != nullptr)
+        {
+          delete value;
+        }
+        value = new_value;
       }
 
     }

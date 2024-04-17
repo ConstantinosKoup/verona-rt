@@ -13,25 +13,22 @@ private:
 public:
   Body(std::string message) : message{message} {}
 
-  const char *get_message()
+  const char *get_message() const
   {
     return message.c_str();
   }
 
-  static void serialize(Body*& body, std::iostream& archive)
+  static Body *serialize(const Body* body, std::iostream& archive)
   {
     if (body == nullptr)
     {
       std::string data((std::istreambuf_iterator<char>(archive)), std::istreambuf_iterator<char>());
-      body = new Body(data);
+      return new Body(data);
     }
-    else
-    {
-      size_t archive_size = body->message.size() + 1;
-      archive.write(body->get_message(), archive_size);
-      delete body;
-      body = nullptr;
-    }
+
+    size_t archive_size = body->message.size() + 1;
+    archive.write(body->get_message(), archive_size);
+    return nullptr;
   }
 
   ~Body()
