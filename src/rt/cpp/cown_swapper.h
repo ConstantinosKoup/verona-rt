@@ -33,22 +33,15 @@ namespace verona::cpp
             ActualCown<T>* cown = cown_ptr.allocated_cown;
             schedule_swap_lambda(cown, [cown]()
             {
-                char *data;
-                size_t data_size;
-
                 Logging::cout() << "Swapping cown " << cown << Logging::endl;
-
                 auto cown_dir = CownSwapper::get_cown_dir();
                 std::stringstream filename;
                 filename << cown << ".cown";
-                std::ofstream ofs(cown_dir / filename.str(), std::ios::out | std::ios::binary);
+                std::fstream ofs(cown_dir / filename.str(), std::ios::out | std::ios::binary);
                 
-                // cown->serialize(data, data_size, SerializeMode::READING);
+                cown->serialize(ofs);
 
                 ofs.close();
-
-                // T value_to_delete = cown->value;
-                // delete value_to_delete;
             });
         }
     };

@@ -11,34 +11,10 @@
 
 namespace verona::rt
 {
-    template<class T, class = void>
-    struct has_serialize
-    : std::false_type
-    {};
-
-    template<class T>
-    struct has_serialize<T, std::enable_if_t<std::is_same_v<void(char *, size_t&, SerializeMode), decltype(T::serialize)>>>
-    : std::true_type
-    {};
-
-    class Behaviour;
-
     class CownSwapper {
     private:
 
     public:
-        // Should use concepts if we move to C++ 20.
-        template<typename T>
-        static constexpr bool is_swappable()
-        {
-            if(!std::is_pointer_v<T>)
-                return false;
-
-            using BaseT = std::remove_pointer_t<T>;
-
-            return has_serialize<BaseT>::value;
-        }
-        
         static std::filesystem::path get_cown_dir()
         {
             namespace fs = std::filesystem;
@@ -56,22 +32,15 @@ namespace verona::rt
             auto fetch_lambda = [cown]()
             {
                 Logging::cout() << "Fetching cown " << cown << Logging::endl;
-
-                // using BaseT = std::remove_pointer_t<T>;
-
-                std::fstream data;
-                size_t data_size;
-
-                cown->serialize(data, data_size);
-
                 auto cown_dir = get_cown_dir();
                 std::stringstream filename;
-                // filename << cown << ".cown";
-                // std::ifstream ifs(cown_dir / filename.str(), std::ios::in | std::ios::binary);
-                // cown->value = BaseT::load(ifs);
-                // ifs.close();
+                filename << cown << ".cown";
+                std::fstream ifs(cown_dir / filename.str(), std::ios::in | std::ios::binary);
+
+                cown->serialize(ifs);
+                
+                ifs.close();
             };
-            // auto foo = Behaviour::make<decltype(fetch_lambda)>(1, fetch_lambda);
 
             should_fetch = false;
             auto expected = ON_DISK;

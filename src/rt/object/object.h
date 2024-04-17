@@ -75,12 +75,6 @@ namespace verona::rt
   static constexpr size_t descriptor_alignment =
     snmalloc::bits::min<size_t>(8, alignof(void*));
 
-  enum class SerializeMode
-  {
-    READING,
-    WRITING
-  };
-
   struct alignas(descriptor_alignment) Descriptor
   {
     // for field in o do
@@ -108,7 +102,7 @@ namespace verona::rt
 
     using DestructorFunction = void (*)(Object* o);
 
-    using SerializeFunction = void (*)(Object *o, std::iostream& archive, size_t& archive_size);
+    using SerializeFunction = void (*)(Object *o, std::iostream& archive);
 
     size_t size;
     TraceFunction trace;
@@ -878,10 +872,10 @@ namespace verona::rt
         get_descriptor()->destructor(this);
     }
 
-    inline void serialize(std::iostream& archive, size_t& archive_size)
+    inline void serialize(std::iostream& archive)
     {
       if (has_serializer())
-        get_descriptor()->serializer(this, archive, archive_size);
+        get_descriptor()->serializer(this, archive);
     }
 
     inline void dealloc(Alloc& alloc)

@@ -50,6 +50,16 @@ namespace verona::cpp
     ActualCown(Args&&... ts) : value(std::forward<Args>(ts)...)
     {}
 
+    template<class TT, class = void>
+    struct has_serialize
+    : std::false_type
+    {};
+
+    template<class TT>
+    struct has_serialize<TT, std::enable_if_t<std::is_same_v<void(T&, std::iostream&), decltype(TT::serialize)>>>
+    : std::true_type
+    {};
+
     template<typename TT>
     friend class acquired_cown;
 
@@ -60,6 +70,28 @@ namespace verona::cpp
     friend cown_ptr<TT> make_cown(Args&&... ts);
 
     friend class ActualCownSwapper;
+
+  public:
+    static constexpr bool is_serializable()
+    {
+        if(!std::is_pointer_v<T>)
+            return false;
+
+        using BaseT = std::remove_pointer_t<T>;
+
+        return has_serialize<BaseT>::value;
+    }
+
+    void serialize(std::iostream& archive)
+    {
+      if constexpr (is_serializable())
+      {
+        using BaseT = std::remove_pointer_t<T>;
+
+        BaseT::serialize(value, archive);
+      }
+
+    }
   };
 
   /**
