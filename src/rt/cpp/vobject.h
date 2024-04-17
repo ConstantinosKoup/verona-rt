@@ -3,6 +3,7 @@
 #pragma once
 
 #include "../region/region_api.h"
+#include "../sched/cown_swapper.h"
 
 #include <new>
 #include <type_traits>
@@ -39,6 +40,12 @@ namespace verona::rt
   struct has_destructor
   {
     constexpr static bool value = !std::is_trivially_destructible_v<T>;
+  };
+
+  template<class T>
+  struct has_serializer
+  {
+    constexpr static bool value = CownSwapper::is_swappable<T>();
   };
 
   /**
@@ -83,6 +90,34 @@ namespace verona::rt
 
     void trace(ObjectStack&) {}
 
+    // static void gc_serialize(Object *o, char *archive, size_t& archive_size, SerializeMode mode)
+    // {
+    //   if constexpr (has_serializer<T>::value)
+    //     ((T*)o)->serializer(archive, archive_size, mode);
+    //   else
+    //   {
+    //     UNUSED(o);
+    //     UNUSED(archive);
+    //     UNUSED(archive_size);
+    //     UNUSED(mode);
+    //   }
+    // }
+
+    static void gc_serialize(Object *o, std::iostream& archive, size_t& archive_size)
+    {
+      // if constexpr (has_serializer<T>::value)
+      //   ((T*)o)->serializer(archive, archive_size, mode);
+      // else
+      // {
+      //   UNUSED(o);
+      //   UNUSED(archive);
+      //   UNUSED(archive_size);
+      //   UNUSED(mode);
+      // }
+      // archive = (char *)5;
+      archive_size = 1;
+    }
+
   public:
     VBase() : Base() {}
 
@@ -93,7 +128,9 @@ namespace verona::rt
         gc_trace,
         has_finaliser<T>::value ? gc_final : nullptr,
         has_notified<T>::value ? gc_notified : nullptr,
-        has_destructor<T>::value ? gc_destructor : nullptr};
+        has_destructor<T>::value ? gc_destructor : nullptr,
+        // has_serializer<T>::value ? gc_serialize : nullptr};
+        gc_serialize};
 
       return &desc;
     }

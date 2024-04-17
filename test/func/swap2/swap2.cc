@@ -21,7 +21,7 @@ public:
     return (message + std::to_string(_num)).c_str();
   }
 
-    static void save(std::ofstream& file, Body *body) {
+  static void save(std::ofstream& file, Body *body) {
     file.write(reinterpret_cast<const char *>(&body->_num), sizeof(body->_num));
   }
 

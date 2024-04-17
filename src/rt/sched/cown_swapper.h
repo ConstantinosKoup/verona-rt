@@ -12,22 +12,12 @@
 namespace verona::rt
 {
     template<class T, class = void>
-    struct has_save
+    struct has_serialize
     : std::false_type
     {};
 
     template<class T>
-    struct has_save<T, std::enable_if_t<std::is_same_v<void(std::ofstream&, T*), decltype(T::save)>>>
-    : std::true_type
-    {};
-
-    template<class T, class = void>
-    struct has_load
-    : std::false_type
-    {};
-
-    template<class T>
-    struct has_load<T, std::enable_if_t<std::is_same_v<T*(std::ifstream&), decltype(T::load)>>>
+    struct has_serialize<T, std::enable_if_t<std::is_same_v<void(char *, size_t&, SerializeMode), decltype(T::serialize)>>>
     : std::true_type
     {};
 
@@ -35,6 +25,8 @@ namespace verona::rt
 
     class CownSwapper {
     private:
+
+    public:
         // Should use concepts if we move to C++ 20.
         template<typename T>
         static constexpr bool is_swappable()
@@ -44,10 +36,9 @@ namespace verona::rt
 
             using BaseT = std::remove_pointer_t<T>;
 
-            return has_save<BaseT>::value && has_load<BaseT>::value;
+            return has_serialize<BaseT>::value;
         }
-
-    public:
+        
         static std::filesystem::path get_cown_dir()
         {
             namespace fs = std::filesystem;
@@ -67,6 +58,11 @@ namespace verona::rt
                 Logging::cout() << "Fetching cown " << cown << Logging::endl;
 
                 // using BaseT = std::remove_pointer_t<T>;
+
+                std::fstream data;
+                size_t data_size;
+
+                cown->serialize(data, data_size);
 
                 auto cown_dir = get_cown_dir();
                 std::stringstream filename;
