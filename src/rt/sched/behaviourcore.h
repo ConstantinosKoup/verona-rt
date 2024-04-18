@@ -454,23 +454,17 @@ namespace verona::rt
         bool fetched = false;
         if (body->is_swap_behaviour)
         {
-          if (! CownSwapper::swap_to_disk(cown)) {
+          if (! CownSwapper::should_swap_to_disk(cown)) {
             ++i;
             continue;
           }
         }
         else
         {
-          // auto fetch_work = CownSwapper::get_fetch_work(cown);
-          // if (fetch_work != nullptr)
-
           bool should_fetch;
           auto fetch_lambda = CownSwapper::get_fetch_lambda(cown, should_fetch);
           if (should_fetch)
           {
-            // void* base_behaviour = from_work(fetch_work);
-            // fetches[i] = new (base_behaviour) BehaviourCore(1);
-
             fetches[i] = BehaviourCore::make(1, invoke<decltype(fetch_lambda)>, sizeof(fetch_lambda));
             new (fetches[i]->get_body()) decltype(fetch_lambda)(std::forward<decltype(fetch_lambda)>(fetch_lambda));
 

@@ -13,8 +13,6 @@ namespace verona::rt
 {
     class CownSwapper {
     private:
-
-    public:
         static std::filesystem::path get_cown_dir()
         {
             namespace fs = std::filesystem;
@@ -25,6 +23,25 @@ namespace verona::rt
             fs::permissions(cown_dir, fs::perms::owner_all);
 
             return cown_dir;
+        }
+
+    public:
+        static auto get_swap_lambda(Cown* cown)
+        {
+            auto swap_lambda = [cown]()
+            {
+                Logging::cout() << "Swapping cown " << cown << Logging::endl;
+                auto cown_dir = get_cown_dir();
+                std::stringstream filename;
+                filename << cown << ".cown";
+                std::fstream ofs(cown_dir / filename.str(), std::ios::out | std::ios::binary);
+                
+                cown->serialize(ofs);
+
+                ofs.close();
+            };
+            
+            return swap_lambda;
         }
 
         static auto get_fetch_lambda(Cown *cown, bool& should_fetch)
@@ -43,6 +60,7 @@ namespace verona::rt
             };
 
             should_fetch = false;
+
             auto expected = ON_DISK;
             if (cown->swapped.compare_exchange_strong(expected, SwapStatus::IN_MEMORY, std::memory_order_acquire))
             {
@@ -52,13 +70,13 @@ namespace verona::rt
             return fetch_lambda;
         }
 
-        static bool swap_to_disk(Cown *cown)
+        static bool should_swap_to_disk(Cown *cown)
         {
-            // if constexpr (is_swappable<typeof(cown->value)>())
-            // {
-                auto expected = SwapStatus::IN_MEMORY;
-                return cown->swapped.compare_exchange_strong(expected, SwapStatus::ON_DISK, std::memory_order_acq_rel);
-            // }
+            if (!cown->has_serializer())
+                return false;
+                
+            auto expected = SwapStatus::IN_MEMORY;
+            return cown->swapped.compare_exchange_strong(expected, SwapStatus::ON_DISK, std::memory_order_acq_rel);
         }
 
     };

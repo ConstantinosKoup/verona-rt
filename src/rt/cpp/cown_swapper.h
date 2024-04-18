@@ -31,18 +31,14 @@ namespace verona::cpp
         static void schedule_swap(cown_ptr<T>& cown_ptr)
         {
             ActualCown<T>* cown = cown_ptr.allocated_cown;
-            schedule_swap_lambda(cown, [cown]()
+            if constexpr (! ActualCown<T>::is_serializable::value)
             {
-                Logging::cout() << "Swapping cown " << cown << Logging::endl;
-                auto cown_dir = CownSwapper::get_cown_dir();
-                std::stringstream filename;
-                filename << cown << ".cown";
-                std::fstream ofs(cown_dir / filename.str(), std::ios::out | std::ios::binary);
-                
-                cown->serialize(ofs);
+                Logging::cout() << "Cannot swap cown " << cown << " as its value is not serializable" << Logging::endl;
+                return;
+            }
 
-                ofs.close();
-            });
+            auto swap_lambda = CownSwapper::get_swap_lambda(cown);
+            schedule_swap_lambda(cown, std::forward<decltype(swap_lambda)>(swap_lambda));
         }
     };
 
