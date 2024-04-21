@@ -191,21 +191,6 @@ namespace verona::rt
       return pointer_offset<BehaviourCore>(w, sizeof(Work));
     }
 
-    template<typename Be>
-    static void invoke(Work* work)
-    {
-      // Dispatch to the body of the behaviour.
-      BehaviourCore* behaviour = BehaviourCore::from_work(work);
-      Be* body = behaviour->get_body<Be>();
-      (*body)();
-
-      behaviour->release_all();
-
-      // Dealloc behaviour
-      body->~Be();
-      work->dealloc();
-    }
-
     /**
      * Remove `n` from the exec_count_down.
      *

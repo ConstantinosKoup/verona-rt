@@ -65,13 +65,13 @@ namespace verona::rt
         static void set_swapped(Cown *cown)
         {
             auto expected = SwapStatus::IN_MEMORY;
-            cown->swapped.compare_exchange_strong(expected, SwapStatus::ON_DISK, std::memory_order_acq_rel);
+            cown->swap_satus.compare_exchange_strong(expected, SwapStatus::ON_DISK, std::memory_order_acq_rel);
         }
 
         static bool set_in_memory(Cown *cown)
         {
             auto expected = ON_DISK;
-            if (cown->swapped.compare_exchange_strong(expected, SwapStatus::IN_MEMORY, std::memory_order_acquire))
+            if (cown->swap_satus.compare_exchange_strong(expected, SwapStatus::IN_MEMORY, std::memory_order_acquire))
             {
                 Logging::cout() << "Scheduling fetch for cown " << cown << Logging::endl;
                 return true;
@@ -80,9 +80,10 @@ namespace verona::rt
             return false;
         }
 
-        static void set_fetch_behaviour(Cown *cown, BehaviourCore *fetch_behaviour)
+        static void set_fetch_behaviour(Cown *cown, BehaviourCore *fetch_behaviour, void (*fetch_deallocator)(BehaviourCore *))
         {
             cown->fetch_behaviour = fetch_behaviour;
+            cown->fetch_deallocator = fetch_deallocator;
         }
 
     };

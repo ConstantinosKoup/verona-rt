@@ -12,6 +12,12 @@
 
 namespace verona::rt
 {
+  class BehaviourCore;
+  enum SwapStatus {
+    IN_MEMORY,
+    ON_DISK,
+  };
+
   /**
    * Shared wrapper that encapsulates the implementation of memory management
    * for Shared objects in the verona runtime.
@@ -34,6 +40,13 @@ namespace verona::rt
      *promoted to strong, if a strong reference still exists.
      **/
     std::atomic<size_t> weak_count{1};
+
+    std::atomic<SwapStatus> swap_satus{SwapStatus::IN_MEMORY};
+    BehaviourCore *fetch_behaviour{nullptr};
+    void (*fetch_deallocator)(BehaviourCore *);
+
+    friend class BehaviourCore;
+    friend class CownSwapper;
 
   public:
     static void acquire(Object* o)
@@ -67,6 +80,10 @@ namespace verona::rt
       // strong count.
 
       Logging::cout() << "Cown " << o << " dealloc" << Logging::endl;
+
+      // If cown was left on disk we need to deallocate the pre-allocated fetch behaviour
+      if (o->swap_satus.load(std::memory_order_relaxed) == SwapStatus::ON_DISK)
+        o->fetch_deallocator(o->fetch_behaviour);
 
       // If last, then collect the cown body.
       o->queue_collect(alloc);

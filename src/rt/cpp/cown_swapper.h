@@ -27,11 +27,24 @@ namespace verona::cpp
             BehaviourCore::schedule_many(arr, 1);
         }
 
+        template<typename Be>
+        static void dealloc_fetch(BehaviourCore* behaviour)
+        {
+            Logging::cout() << "Fetch Behaviour " << behaviour << " dealloc" << Logging::endl;
+            // Dispatch to the body of the behaviour.
+            Be* body = behaviour->get_body<Be>();
+            auto work = behaviour->as_work();
+            
+            // Dealloc behaviour
+            body->~Be();
+            work->dealloc();
+        }
+
         static void set_fetch_behaviour(Cown *cown)
         {
             auto fetch_lambda = CownSwapper::get_fetch_lambda(cown);
             BehaviourCore *fetch_behaviour = Behaviour::make<decltype(fetch_lambda)>(1, fetch_lambda);
-            CownSwapper::set_fetch_behaviour(cown, fetch_behaviour);
+            CownSwapper::set_fetch_behaviour(cown, fetch_behaviour, dealloc_fetch<decltype(fetch_lambda)>);
         }
     public:
         template<typename T>

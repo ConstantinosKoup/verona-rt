@@ -83,8 +83,6 @@ namespace verona::cpp
       {
         T new_value = BaseT::serialize(value, archive);
 
-        Logging::cout() << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" << new_value << Logging::endl;
-        
         if (value != nullptr)
           delete value;
           
