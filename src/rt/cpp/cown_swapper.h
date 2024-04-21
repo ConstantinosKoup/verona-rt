@@ -31,7 +31,6 @@ namespace verona::cpp
         static void dealloc_fetch(BehaviourCore* behaviour)
         {
             Logging::cout() << "Fetch Behaviour " << behaviour << " dealloc" << Logging::endl;
-            // Dispatch to the body of the behaviour.
             Be* body = behaviour->get_body<Be>();
             auto work = behaviour->as_work();
             
