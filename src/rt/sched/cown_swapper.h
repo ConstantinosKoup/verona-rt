@@ -11,6 +11,8 @@
 
 namespace verona::rt
 {
+    class BehaviourCore;
+
     class CownSwapper {
     private:
         static std::filesystem::path get_cown_dir()
@@ -44,9 +46,9 @@ namespace verona::rt
             return swap_lambda;
         }
 
-        static auto get_fetch_lambda(Cown *cown, bool& should_fetch)
+        static auto get_fetch_lambda(Cown *cown)
         {
-            auto fetch_lambda = [cown]()
+            return [cown]()
             {
                 Logging::cout() << "Fetching cown " << cown << Logging::endl;
                 auto cown_dir = get_cown_dir();
@@ -58,25 +60,30 @@ namespace verona::rt
                 
                 ifs.close();
             };
-
-            should_fetch = false;
-
-            auto expected = ON_DISK;
-            if (cown->swapped.compare_exchange_strong(expected, SwapStatus::IN_MEMORY, std::memory_order_acquire))
-            {
-                Logging::cout() << "Scheduling fetch for cown " << cown << Logging::endl;
-                should_fetch = true;
-            }
-            return fetch_lambda;
         }
 
-        static bool should_swap_to_disk(Cown *cown)
+        static void set_swapped(Cown *cown)
         {
-            if (!cown->has_serializer())
-                return false;
-                
             auto expected = SwapStatus::IN_MEMORY;
-            return cown->swapped.compare_exchange_strong(expected, SwapStatus::ON_DISK, std::memory_order_acq_rel);
+            cown->swap_satus.compare_exchange_strong(expected, SwapStatus::ON_DISK, std::memory_order_acq_rel);
+        }
+
+        static bool set_in_memory(Cown *cown)
+        {
+            auto expected = ON_DISK;
+            if (cown->swap_satus.compare_exchange_strong(expected, SwapStatus::IN_MEMORY, std::memory_order_acquire))
+            {
+                Logging::cout() << "Scheduling fetch for cown " << cown << Logging::endl;
+                return true;
+            }
+
+            return false;
+        }
+
+        static void set_fetch_behaviour(Cown *cown, BehaviourCore *fetch_behaviour, void (*fetch_deallocator)(BehaviourCore *))
+        {
+            cown->fetch_behaviour = fetch_behaviour;
+            cown->fetch_deallocator = fetch_deallocator;
         }
 
     };

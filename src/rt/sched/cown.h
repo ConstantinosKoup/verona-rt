@@ -88,12 +88,6 @@ namespace verona::rt
 
   struct Slot;
 
-  enum SwapStatus {
-    IN_MEMORY,
-    // FETCHING,
-    // SWAPPING,
-    ON_DISK,
-  };
 
   class Cown : public Shared
   {
@@ -112,7 +106,6 @@ namespace verona::rt
     friend class Noticeboard;
 
     std::atomic<Slot*> last_slot{nullptr};
-    std::atomic<SwapStatus> swapped{SwapStatus::IN_MEMORY};
 
     /*
      * Cown's read ref count.

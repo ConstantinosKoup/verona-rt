@@ -25,7 +25,7 @@ public:
   {
     if (body == nullptr)
     {
-      size_t num;
+      int num;
       archive.read (reinterpret_cast<char *>(&num), sizeof(num));
       return new Body(num);
     }

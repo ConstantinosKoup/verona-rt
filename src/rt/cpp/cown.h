@@ -82,7 +82,7 @@ namespace verona::cpp
       if constexpr (is_serializable::value)
       {
         T new_value = BaseT::serialize(value, archive);
-        
+
         if (value != nullptr)
           delete value;
           
@@ -368,8 +368,6 @@ namespace verona::cpp
 
     template<typename F, typename... Args2>
     friend class When;
-
-    friend class CownSwapper;
   };
 
   /* A cown_ptr<const T> is used to mark that the cown is being accessed as
