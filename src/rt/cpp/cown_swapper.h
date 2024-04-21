@@ -26,6 +26,13 @@ namespace verona::cpp
             BehaviourCore *arr[] = {b};
             BehaviourCore::schedule_many(arr, 1);
         }
+
+        static void set_fetch_behaviour(Cown *cown)
+        {
+            auto fetch_lambda = CownSwapper::get_fetch_lambda(cown);
+            BehaviourCore *fetch_behaviour = Behaviour::make<decltype(fetch_lambda)>(1, fetch_lambda);
+            CownSwapper::set_fetch_behaviour(cown, fetch_behaviour);
+        }
     public:
         template<typename T>
         static void schedule_swap(cown_ptr<T>& cown_ptr)
@@ -36,6 +43,8 @@ namespace verona::cpp
                 Logging::cout() << "Cannot swap cown " << cown << " as its value is not serializable" << Logging::endl;
                 return;
             }
+            
+            set_fetch_behaviour(cown);
 
             auto swap_lambda = CownSwapper::get_swap_lambda(cown);
             schedule_swap_lambda(cown, std::forward<decltype(swap_lambda)>(swap_lambda));

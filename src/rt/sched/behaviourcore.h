@@ -451,33 +451,6 @@ namespace verona::rt
         // I.e. how many moves of cown_refs there were.
         size_t transfer_count = last_slot->status;
 
-        bool fetched = false;
-        if (body->is_swap_behaviour)
-        {
-          if (! CownSwapper::should_swap_to_disk(cown)) {
-            ++i;
-            continue;
-          }
-        }
-        else
-        {
-          bool should_fetch;
-          auto fetch_lambda = CownSwapper::get_fetch_lambda(cown, should_fetch);
-          if (should_fetch)
-          {
-            fetches[i] = BehaviourCore::make(1, invoke<decltype(fetch_lambda)>, sizeof(fetch_lambda));
-            new (fetches[i]->get_body()) decltype(fetch_lambda)(std::forward<decltype(fetch_lambda)>(fetch_lambda));
-
-            auto slots = fetches[i]->get_slots();
-            auto *s = new (&slots[0]) Slot(cown);
-
-            transfer_count += s->status;
-            s->set_behaviour(body);
-            first_body = fetches[i];
-            fetched = true;
-          }
-        }
-
         // Detect duplicates for this cown.
         // This is required in two cases:
         //  * overlaps with multiple behaviours; and
@@ -513,6 +486,27 @@ namespace verona::rt
 
         auto prev =
           cown->last_slot.exchange(last_slot, std::memory_order_acq_rel);
+
+        bool fetched = false;
+        if (body->is_swap_behaviour)
+        {
+          CownSwapper::set_swapped(cown); // should probably check something
+        }
+        else
+        {
+          if (CownSwapper::set_in_memory(cown))
+          {
+            fetches[first_chain_index] = cown->fetch_behaviour;
+
+            auto slots = fetches[first_chain_index]->get_slots();
+            auto *s = new (&slots[0]) Slot(cown);
+
+            transfer_count += s->status;
+            s->set_behaviour(first_body);
+            first_body = fetches[first_chain_index];
+            fetched = true;
+          }
+        }
 
         // set_behaviour to the first_slot
         yield();

@@ -45,7 +45,7 @@ namespace verona::rt
   struct has_serializer : std::false_type
   {};
   template<class T>
-  struct has_serializer<T, std::void_t<decltype(&T::serialize)>, std::void_t<decltype(&T::is_serializable)>>
+  struct has_serializer<T, std::void_t<decltype(&T::serialize)>, std::void_t<decltype(&T::is_serializable::value)>>
   {
     constexpr static bool value = T::is_serializable::value;
   };

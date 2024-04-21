@@ -82,6 +82,8 @@ namespace verona::cpp
       if constexpr (is_serializable::value)
       {
         T new_value = BaseT::serialize(value, archive);
+
+        Logging::cout() << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" << new_value << Logging::endl;
         
         if (value != nullptr)
           delete value;

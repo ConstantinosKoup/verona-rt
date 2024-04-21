@@ -20,6 +20,7 @@ public:
 
   static Body *serialize(Body* body, std::iostream& archive)
   {
+    Logging::cout() << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< Serializing" << Logging::endl;
     if (body == nullptr)
     {
       std::string data((std::istreambuf_iterator<char>(archive)), std::istreambuf_iterator<char>());
