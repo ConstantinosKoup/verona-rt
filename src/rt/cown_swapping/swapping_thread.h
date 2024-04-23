@@ -6,6 +6,7 @@
 #include <iostream>
 #include <thread>
 #include <chrono>
+#include <queue>
 
 #ifdef _WIN32 // Windows-specific headers
 #include <Windows.h>
@@ -41,19 +42,37 @@ namespace verona::cpp
 #endif
 
         void monitorMemoryUsage() {
+            auto count = 0;
             while (keep_monitoring.load(std::memory_order_relaxed)) {
                 // Get memory usage
-                long memoryUsage = getMemoryUsage() / 1024;
+                long memory_usage_MB = getMemoryUsage() / 1024;
 
                 // Print memory usage
-                Logging::cout() << "Memory Usage: " << memoryUsage << " MB" << Logging::endl;
+                Logging::cout() << "Memory Usage: " << memory_usage_MB << " MB" << Logging::endl;
+
+                if (memory_limit_MB > 0 && memory_usage_MB >= memory_limit_MB * 9 / 10)
+                {
+                    for (int i = 0; i < cowns.size() && count < 100; ++i)
+                    {
+                        auto cown = cowns.front();
+                        cowns.pop();
+                        cowns.push(cown);
+                        if (CownSwapper::is_in_memory(cown))
+                        {
+                            ActualCownSwapper::schedule_swap(cown);
+                            ++count;
+                        }
+                    }
+                }
 
                 // Sleep for one second
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
         }
 
+        std::queue<Cown *> cowns;
         std::thread monitoring_thread;
+        size_t memory_limit_MB;
         std::atomic_bool keep_monitoring{true};
 
         CownMemoryThread()
@@ -66,16 +85,32 @@ namespace verona::cpp
         CownMemoryThread(const CownMemoryThread&) = delete;
         void operator=(const CownMemoryThread&) = delete;
 
-    public:
-        static CownMemoryThread& get_ref() {
+        static CownMemoryThread& get_ref()
+        {
             static CownMemoryThread ref;            
             return ref;
         }
+    public:
+        static void create(size_t memory_limit_MB = 0)
+        {
+            get_ref().memory_limit_MB = memory_limit_MB;
+        }
 
-        static void stop_monitoring() {
+        static void stop_monitoring()
+        {
             get_ref().keep_monitoring.store(false, std::memory_order_acq_rel);
-            get_ref().monitoring_thread.join();
             Logging::cout() << "Monitoring thread terminated" << Logging::endl;
+        }
+
+        template<typename T>
+        static bool register_cown(cown_ptr<T>& cown_ptr)
+        {
+            Cown *cown = ActualCownSwapper::get_cown_if_swappable(cown_ptr);
+            if (cown == nullptr)
+                return false;
+
+            get_ref().cowns.push(cown);
+            return true;
         }
 
     

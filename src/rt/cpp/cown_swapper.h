@@ -45,21 +45,39 @@ namespace verona::cpp
             BehaviourCore *fetch_behaviour = Behaviour::make<decltype(fetch_lambda)>(1, fetch_lambda);
             CownSwapper::set_fetch_behaviour(cown, fetch_behaviour, dealloc_fetch<decltype(fetch_lambda)>);
         }
+
+        template<typename T>
+        static Cown *get_cown_if_swappable(cown_ptr<T>& cown_ptr)
+        {
+            ActualCown<T>* cown = cown_ptr.allocated_cown;
+            if constexpr (! ActualCown<T>::is_serializable::value)
+                return nullptr;
+
+            return cown;
+        }
+
+        static void schedule_swap(Cown *cown)
+        {
+            set_fetch_behaviour(cown);
+
+            auto swap_lambda = CownSwapper::get_swap_lambda(cown);
+            schedule_swap_lambda(cown, std::forward<decltype(swap_lambda)>(swap_lambda));
+        }
+
+        friend class CownMemoryThread;
+        
     public:
         template<typename T>
         static void schedule_swap(cown_ptr<T>& cown_ptr)
         {
-            ActualCown<T>* cown = cown_ptr.allocated_cown;
-            if constexpr (! ActualCown<T>::is_serializable::value)
+            Cown *cown = get_cown_if_swappable(cown_ptr);
+            if (cown == nullptr)
             {
                 Logging::cout() << "Cannot swap cown " << cown << " as its value is not serializable" << Logging::endl;
                 return;
             }
             
-            set_fetch_behaviour(cown);
-
-            auto swap_lambda = CownSwapper::get_swap_lambda(cown);
-            schedule_swap_lambda(cown, std::forward<decltype(swap_lambda)>(swap_lambda));
+            schedule_swap(cown);
         }
     };
 

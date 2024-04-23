@@ -28,6 +28,11 @@ namespace verona::rt
         }
 
     public:
+        static bool is_in_memory(Cown *cown)
+        {
+            return cown->swap_satus.load(std::memory_order_relaxed) == SwapStatus::IN_MEMORY;
+        }
+
         static auto get_swap_lambda(Cown* cown)
         {
             auto swap_lambda = [cown]()

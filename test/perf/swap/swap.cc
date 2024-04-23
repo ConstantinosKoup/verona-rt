@@ -54,8 +54,9 @@ class Store
       for (size_t i = 0; i < size; ++i)
       {
         std::stringstream ss;
-        ss << "Message for cown: " << i;
+        ss << "Message for cown aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: " << i;
         bodies[i] = make_cown<Body*>(new Body(ss.str()));
+        CownMemoryThread::register_cown(bodies[i]);
       }
     }
 
@@ -72,7 +73,7 @@ void test_body(SystematicTestHarness *harness)
   size_t seed = harness->current_seed();
   Logging::cout() << "test_body()" << Logging::endl;
 
-  auto store_cown = make_cown<Store>(1000000);
+  auto store_cown = make_cown<Store>(100000);
   std::srand(seed);
 
   when(store_cown) << [=](auto s) 
@@ -80,7 +81,7 @@ void test_body(SystematicTestHarness *harness)
     Store& store = s.get_ref();
     for (int i = 0; i < 2 * store.size; ++i)
     {
-      when(store.bodies[std::rand() / store.size]) << [=](auto b)
+      when(store.bodies[std::rand() % store.size]) << [=](auto b)
       {
         auto body = b.get_ref();
         Logging::cout() << "Reading message: " << body->get_message() << Logging::endl;
@@ -92,13 +93,14 @@ void test_body(SystematicTestHarness *harness)
 
 int main(int argc, char** argv)
 {
+
   SystematicTestHarness harness(argc, argv);
 
-  CownMemoryThread::get_ref();
+  CownMemoryThread::create(50);
 
   harness.run(test_body, &harness);
 
   CownMemoryThread::stop_monitoring();
-
+  
   return 0;
 }
