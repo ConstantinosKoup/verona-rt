@@ -76,9 +76,13 @@ namespace verona::cpp
                     auto count = 0;
                     for (int i = 0; i < cowns.size() && count < 4; ++i)
                     {
-                        auto cown = cowns.front();
+                        auto cown_func = cowns.front();
+                        auto cown = cown_func();
                         cowns.pop_front();
-                        cowns.push_back(cown);
+                        if (cown == nullptr)
+                            continue;
+
+                        cowns.push_back(cown_func);
                         if (CownSwapper::is_in_memory(cown))
                         {
                             ActualCownSwapper::schedule_swap(cown);
@@ -94,7 +98,7 @@ namespace verona::cpp
             }
         }
 
-        std::deque<Cown *> cowns;
+        std::deque<std::function<Cown *()>> cowns;
         std::thread monitoring_thread;
         size_t memory_limit_MB;
         std::atomic_bool keep_monitoring{true};
@@ -117,6 +121,8 @@ namespace verona::cpp
             return ref;
         }
 
+        ~CownMemoryThread() = default;
+
     public:
         static void create(size_t memory_limit_MB = 0)
         {
@@ -133,18 +139,29 @@ namespace verona::cpp
 
         static void stop_monitoring()
         {
-            get_ref().keep_monitoring.store(false, std::memory_order_acq_rel);
+            auto& ref = get_ref();
+            ref.keep_monitoring.store(false, std::memory_order_acq_rel);
             Logging::cout() << "Monitoring thread terminated" << Logging::endl;
+            ref.~CownMemoryThread();
         }
 
         template<typename T>
         static bool register_cown(cown_ptr<T>& cown_ptr)
         {
-            Cown *cown = ActualCownSwapper::get_cown_if_swappable(cown_ptr);
-            if (cown == nullptr)
+            if constexpr (! ActualCown<T>::is_serializable::value)
                 return false;
 
-            get_ref().cowns.push_back(cown);
+            auto foo = [ weak = cown_ptr.get_weak() ]() mutable
+            { 
+                auto strong = weak.promote();
+                if (strong == nullptr)
+                    return (Cown*) nullptr;
+                
+                return ActualCownSwapper::get_cown_if_swappable(strong);
+            };
+
+            get_ref().cowns.push_back(foo);
+
             return true;
         }
 
