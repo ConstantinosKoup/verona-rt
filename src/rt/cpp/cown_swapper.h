@@ -47,13 +47,16 @@ namespace verona::cpp
         }
 
         template<typename T>
-        static Cown *get_cown_if_swappable(cown_ptr<T>& cown_ptr)
+        static Cown *register_cown(cown_ptr<T>& cown_ptr)
         {
-            ActualCown<T>* cown = cown_ptr.allocated_cown;
             if constexpr (! ActualCown<T>::is_serializable::value)
                 return nullptr;
 
-            return cown;
+            ActualCown<T>* cown = cown_ptr.allocated_cown;
+            if (CownSwapper::register_cown(cown))
+                return cown;
+            
+            return nullptr;
         }
 
         static void schedule_swap(Cown *cown)
@@ -62,6 +65,16 @@ namespace verona::cpp
 
             auto swap_lambda = CownSwapper::get_swap_lambda(cown);
             schedule_swap_lambda(cown, std::forward<decltype(swap_lambda)>(swap_lambda));
+        }
+
+        template<typename T>
+        static Cown *get_cown_if_swappable(cown_ptr<T>& cown_ptr)
+        {
+            ActualCown<T>* cown = cown_ptr.allocated_cown;
+            if constexpr (! ActualCown<T>::is_serializable::value)
+                return nullptr;
+
+            return cown;
         }
 
         friend class CownMemoryThread;

@@ -23,6 +23,13 @@ namespace verona::cpp
     class CownMemoryThread
     {
     private:
+        std::deque<Cown*> cowns;
+        std::thread monitoring_thread;
+        size_t memory_limit_MB;
+        std::atomic_bool keep_monitoring{true};
+
+
+
 #ifdef _WIN32
         // Function to get memory usage for Windows
         static SIZE_T getMemoryUsage() {
@@ -61,7 +68,7 @@ namespace verona::cpp
 #endif
 
         void monitorMemoryUsage() {
-            while (keep_monitoring.load(std::memory_order_relaxed))
+            while (keep_monitoring.load(std::memory_order_relaxed) || !cowns.empty())
             {
                 // Get memory usage
                 long memory_usage_MB = getMemoryUsage() / 1024;
@@ -76,13 +83,12 @@ namespace verona::cpp
                     auto count = 0;
                     for (int i = 0; i < cowns.size() && count < 4; ++i)
                     {
-                        auto cown_func = cowns.front();
-                        auto cown = cown_func();
+                        auto cown = cowns.front();
                         cowns.pop_front();
-                        if (cown == nullptr)
+                        if (CownSwapper::free_cown(cown))
                             continue;
 
-                        cowns.push_back(cown_func);
+                        cowns.push_back(cown);
                         if (CownSwapper::is_in_memory(cown))
                         {
                             ActualCownSwapper::schedule_swap(cown);
@@ -96,12 +102,10 @@ namespace verona::cpp
                     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 #endif
             }
-        }
 
-        std::deque<std::function<Cown *()>> cowns;
-        std::thread monitoring_thread;
-        size_t memory_limit_MB;
-        std::atomic_bool keep_monitoring{true};
+            Logging::cout() << "Monitoring thread terminated" << Logging::endl;
+            CownSwapper::free_cowns(cowns);
+        }
         
         CownMemoryThread(bool debug = false)
         {
@@ -121,8 +125,6 @@ namespace verona::cpp
             return ref;
         }
 
-        ~CownMemoryThread() = default;
-
     public:
         static void create(size_t memory_limit_MB = 0)
         {
@@ -141,27 +143,20 @@ namespace verona::cpp
         {
             auto& ref = get_ref();
             ref.keep_monitoring.store(false, std::memory_order_acq_rel);
-            Logging::cout() << "Monitoring thread terminated" << Logging::endl;
-            ref.~CownMemoryThread();
         }
 
         template<typename T>
         static bool register_cown(cown_ptr<T>& cown_ptr)
         {
-            if constexpr (! ActualCown<T>::is_serializable::value)
+            auto cown = ActualCownSwapper::register_cown(cown_ptr);
+            if (cown == nullptr)
                 return false;
 
-            auto foo = [ weak = cown_ptr.get_weak() ]() mutable
-            { 
-                auto strong = weak.promote();
-                if (strong == nullptr)
-                    return (Cown*) nullptr;
-                
-                return ActualCownSwapper::get_cown_if_swappable(strong);
-            };
+            get_ref().cowns.push_back(cown);
 
-            get_ref().cowns.push_back(foo);
-
+#ifdef USE_SYSTEMATIC_TESTING
+            get_ref().keep_monitoring.store(false, std::memory_order_relaxed);
+#endif
             return true;
         }
 

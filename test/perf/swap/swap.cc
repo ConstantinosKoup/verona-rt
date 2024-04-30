@@ -66,7 +66,7 @@ class Store
       bodies = new cown_ptr<Body*>[size];
       for (size_t i = 0; i < size; ++i)
       {
-        size_t data_size = 100000000;
+        size_t data_size = 10000000;
         char *data = new char[data_size]();
         bodies[i] = make_cown<Body*>(new Body(i, data_size, data));
         CownMemoryThread::register_cown(bodies[i]);
@@ -121,7 +121,7 @@ int main(int argc, char** argv)
 
   SystematicTestHarness harness(argc, argv);
 
-  harness.external_thread(CownMemoryThread::create_debug(3000));
+  harness.external_thread(CownMemoryThread::create_debug(300));
   harness.run(test_body, &harness);
 
   return 0;

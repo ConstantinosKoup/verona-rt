@@ -67,10 +67,16 @@ namespace verona::rt
             };
         }
 
-        static void set_swapped(Cown *cown)
+        static bool register_cown(Cown *cown)
+        {
+            auto expected = SwapStatus::UNREGISTERED;
+            return cown->swap_satus.compare_exchange_strong(expected, SwapStatus::IN_MEMORY, std::memory_order_acq_rel);
+        }
+
+        static bool set_swapped(Cown *cown)
         {
             auto expected = SwapStatus::IN_MEMORY;
-            cown->swap_satus.compare_exchange_strong(expected, SwapStatus::ON_DISK, std::memory_order_acq_rel);
+            return cown->swap_satus.compare_exchange_strong(expected, SwapStatus::ON_DISK, std::memory_order_acq_rel);
         }
 
         static bool set_in_memory(Cown *cown)
@@ -79,6 +85,28 @@ namespace verona::rt
             if (cown->swap_satus.compare_exchange_strong(expected, SwapStatus::IN_MEMORY, std::memory_order_acquire))
             {
                 Logging::cout() << "Scheduling fetch for cown " << cown << Logging::endl;
+                return true;
+            }
+
+            return false;
+        }
+
+
+        static void free_cowns(std::deque<Cown*>& cowns)
+        {
+            while (!cowns.empty())
+            {
+                auto cown = cowns.front();
+                cown->queue_collect(ThreadAlloc::get());
+                cowns.pop_front();
+            }
+        }
+
+        static bool free_cown(Cown *cown)
+        {
+            if (cown->swap_satus.load(std::memory_order_relaxed) == SwapStatus::FREED)
+            {
+                cown->queue_collect(ThreadAlloc::get());
                 return true;
             }
 
