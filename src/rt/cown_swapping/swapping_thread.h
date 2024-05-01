@@ -26,7 +26,9 @@ namespace verona::cpp
         std::deque<Cown*> cowns;
         std::thread monitoring_thread;
         size_t memory_limit_MB;
-        std::atomic_bool keep_monitoring{true};
+        std::atomic_bool keep_monitoring;
+
+        CownMemoryThread() = default;
 
 
 
@@ -67,6 +69,16 @@ namespace verona::cpp
         }
 #endif
 
+        void unregister_cowns()
+        {
+            while (!cowns.empty())
+            {
+                CownSwapper::unregister_cown(cowns.front());
+                cowns.pop_front();
+            }
+        }
+           
+
         void monitorMemoryUsage() {
             while (keep_monitoring.load(std::memory_order_relaxed) || !cowns.empty())
             {
@@ -78,14 +90,16 @@ namespace verona::cpp
 
                 yield();
 
-                if (memory_limit_MB > 0 && memory_usage_MB >= memory_limit_MB * 9 / 10)
+                if (memory_limit_MB == 0)
+                    unregister_cowns();
+                else if (memory_usage_MB >= memory_limit_MB * 9 / 10)
                 {
                     auto count = 0;
                     for (int i = 0; i < cowns.size() && count < 4; ++i)
                     {
                         auto cown = cowns.front();
                         cowns.pop_front();
-                        if (CownSwapper::free_cown(cown))
+                        if (!CownSwapper::acquire_strong(cown))
                             continue;
 
                         cowns.push_back(cown);
@@ -94,21 +108,29 @@ namespace verona::cpp
                             ActualCownSwapper::schedule_swap(cown);
                             ++count;
                         }
+
+                        CownSwapper::release_strong(cown);
                     }
                 }
 #ifdef USE_SYSTEMATIC_TESTING
                     yield();
 #else
-                    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                    // std::this_thread::sleep_for(std::chrono::milliseconds(500));
 #endif
             }
 
             Logging::cout() << "Monitoring thread terminated" << Logging::endl;
-            CownSwapper::free_cowns(cowns);
+
+            // Remove for bettter performance
+            CownSwapper::clear_cown_dir();
         }
         
-        CownMemoryThread(bool debug = false)
+        void reset(size_t memory_limit_MB, bool debug = false)
         {
+
+            this->keep_monitoring = true;
+            this->memory_limit_MB = memory_limit_MB;
+
             if (! debug)
                 monitoring_thread = std::thread(&CownMemoryThread::monitorMemoryUsage, this);
 
@@ -119,23 +141,23 @@ namespace verona::cpp
         CownMemoryThread(const CownMemoryThread&) = delete;
         void operator=(const CownMemoryThread&) = delete;
         
-        static CownMemoryThread& get_ref(bool debug = false)
+        static CownMemoryThread& get_ref()
         {
-            static CownMemoryThread ref = CownMemoryThread(debug);            
+            static CownMemoryThread ref = CownMemoryThread();            
             return ref;
         }
 
     public:
         static void create(size_t memory_limit_MB = 0)
         {
-            get_ref().memory_limit_MB = memory_limit_MB;
+            get_ref().reset(memory_limit_MB);
         }
 
         static auto create_debug(size_t memory_limit_MB = 0)
         {
-            auto& ref = get_ref(true);
+            auto& ref = get_ref();
 
-            ref.memory_limit_MB = memory_limit_MB;
+            ref.reset(memory_limit_MB, true);
             return [&ref](){ ref.monitorMemoryUsage(); };
         }
 
@@ -146,14 +168,19 @@ namespace verona::cpp
         }
 
         template<typename T>
-        static bool register_cown(cown_ptr<T>& cown_ptr)
+        static bool register_cowns(size_t count, cown_ptr<T>* cown_ptrs)
         {
-            auto cown = ActualCownSwapper::register_cown(cown_ptr);
-            if (cown == nullptr)
-                return false;
+            for (size_t i = 0; i < count; ++i)
+            {
+                auto cown = ActualCownSwapper::register_cown(cown_ptrs[i]);
+                if (cown == nullptr)
+                    return false;
 
-            get_ref().cowns.push_back(cown);
+                get_ref().cowns.push_back(cown);
+            }
 
+        // In systematic testing, stop monitoring never gets called because it waits until all threads terminate before
+        // shceduler.run() ends
 #ifdef USE_SYSTEMATIC_TESTING
             get_ref().keep_monitoring.store(false, std::memory_order_relaxed);
 #endif

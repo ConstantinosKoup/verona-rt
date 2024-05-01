@@ -28,6 +28,13 @@ namespace verona::rt
         }
 
     public:
+        static void clear_cown_dir()
+        {
+            namespace fs = std::filesystem;
+            auto cown_dir = get_cown_dir();
+
+            fs::remove_all(cown_dir);
+        }
         static bool is_in_memory(Cown *cown)
         {
             return cown->swap_satus.load(std::memory_order_relaxed) == SwapStatus::IN_MEMORY;
@@ -67,10 +74,18 @@ namespace verona::rt
             };
         }
 
-        static bool register_cown(Cown *cown)
+        static void register_cown(Cown *cown)
         {
-            auto expected = SwapStatus::UNREGISTERED;
-            return cown->swap_satus.compare_exchange_strong(expected, SwapStatus::IN_MEMORY, std::memory_order_acq_rel);
+            cown->weak_acquire();
+            // auto expected = SwapStatus::UNREGISTERED;
+            // return cown->swap_satus.compare_exchange_strong(expected, SwapStatus::IN_MEMORY, std::memory_order_acq_rel);
+        }
+
+        static void unregister_cown(Cown *cown)
+        {
+            cown->weak_release(ThreadAlloc::get());
+            // auto expected = SwapStatus::UNREGISTERED;
+            // return cown->swap_satus.compare_exchange_strong(expected, SwapStatus::IN_MEMORY, std::memory_order_acq_rel);
         }
 
         static bool set_swapped(Cown *cown)
@@ -91,26 +106,18 @@ namespace verona::rt
             return false;
         }
 
-
-        static void free_cowns(std::deque<Cown*>& cowns)
+        static bool acquire_strong(Cown *cown)
         {
-            while (!cowns.empty())
-            {
-                auto cown = cowns.front();
-                cown->queue_collect(ThreadAlloc::get());
-                cowns.pop_front();
-            }
+            auto succeeded = cown->acquire_strong_from_weak();
+            if (!succeeded)
+                unregister_cown(cown);
+
+            return succeeded;
         }
 
-        static bool free_cown(Cown *cown)
+        static void release_strong(Cown *cown)
         {
-            if (cown->swap_satus.load(std::memory_order_relaxed) == SwapStatus::FREED)
-            {
-                cown->queue_collect(ThreadAlloc::get());
-                return true;
-            }
-
-            return false;
+            Shared::release(ThreadAlloc::get(), cown);
         }
 
         static void set_fetch_behaviour(Cown *cown, BehaviourCore *fetch_behaviour, void (*fetch_deallocator)(BehaviourCore *))

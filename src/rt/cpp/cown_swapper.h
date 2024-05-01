@@ -53,10 +53,9 @@ namespace verona::cpp
                 return nullptr;
 
             ActualCown<T>* cown = cown_ptr.allocated_cown;
-            if (CownSwapper::register_cown(cown))
-                return cown;
+            CownSwapper::register_cown(cown);
             
-            return nullptr;
+            return cown;
         }
 
         static void schedule_swap(Cown *cown)

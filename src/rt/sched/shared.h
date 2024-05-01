@@ -83,18 +83,12 @@ namespace verona::rt
 
       Logging::cout() << "Cown " << o << " dealloc" << Logging::endl;
 
-      // If last, then collect the cown body.
-      if (o->swap_satus.load(std::memory_order_relaxed) == SwapStatus::UNREGISTERED)
-      {
-        o->queue_collect(alloc);
-        return;
-      }
 
       // If cown was left on disk we need to deallocate the pre-allocated fetch behaviour
       if (o->swap_satus.load(std::memory_order_relaxed) == SwapStatus::ON_DISK)
         o->fetch_deallocator(o->fetch_behaviour);
 
-      o->swap_satus.store(SwapStatus::FREED);
+      o->queue_collect(alloc);
     }
 
     /**
