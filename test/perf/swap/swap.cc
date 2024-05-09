@@ -66,12 +66,11 @@ class Store
       bodies = new cown_ptr<Body*>[size];
       for (size_t i = 0; i < size; ++i)
       {
-        size_t data_size = 30000000;
+        size_t data_size = 10000000;
         char *data = new char[data_size]();
-        bodies[i] = make_cown<Body*>(new Body(i, data_size, data));
+        bodies[i] = make_cown<Body *>(new Body(i, data_size, data));
         yield();
       }
-
       
       CownMemoryThread::register_cowns(size, bodies);
     }
@@ -86,25 +85,30 @@ class Store
 
 void test_body(SystematicTestHarness *harness)
 {
-  harness->external_thread(CownMemoryThread::create_debug(300));
+  harness->external_thread(CownMemoryThread::create_debug(100));
   size_t seed = harness->current_seed();
   Logging::cout() << "test_body()" << Logging::endl;
 
-  auto store_cown = make_cown<Store>(50);
+  auto store_cown = make_cown<Store>(25);
   std::srand(seed);
 
   when(store_cown) << [=](auto s) 
   {
-    
     Store& store = s.get_ref();
-    for (int i = 0; i < 100000 * store.size; ++i)
+#ifdef USE_SYSTEMATIC_TESTING
+    constexpr size_t loop_count = 5000;
+#else
+    constexpr size_t loop_count = 500000;
+#endif
+    for (int i = 0; i < loop_count * store.size; ++i)
     {
       yield();
-      size_t j = std::rand() % (store.size / 5);
+      size_t j = std::rand() % (store.size);
       when(store.bodies[j]) << [=](auto b)
       {
         auto body = b.get_ref();
         yield();
+        Logging::cout() << "Reading address: " << &b.origin_cown << Logging::endl;
         Logging::cout() << "Reading id: " << body->get_id() << Logging::endl;
       };
     }
@@ -119,6 +123,8 @@ int main(int argc, char** argv)
   SystematicTestHarness harness(argc, argv);
 
   harness.run(test_body, &harness);
+
+  CownSwapper::clear_cown_dir();
 
   return 0;
 }

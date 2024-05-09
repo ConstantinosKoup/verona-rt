@@ -14,10 +14,8 @@ namespace verona::rt
 {
   class BehaviourCore;
   enum SwapStatus {
-    UNREGISTERED,
     IN_MEMORY,
     ON_DISK,
-    FREED,
   };
 
   /**
@@ -43,7 +41,7 @@ namespace verona::rt
      **/
     std::atomic<size_t> weak_count{1};
 
-    std::atomic<SwapStatus> swap_satus{SwapStatus::UNREGISTERED};
+    std::atomic<SwapStatus> swap_satus{SwapStatus::IN_MEMORY};
     BehaviourCore *fetch_behaviour{nullptr};
     void (*fetch_deallocator)(BehaviourCore *);
 

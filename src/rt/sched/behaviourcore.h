@@ -472,27 +472,6 @@ namespace verona::rt
         auto prev =
           cown->last_slot.exchange(last_slot, std::memory_order_acq_rel);
 
-        bool fetched = false;
-        if (body->is_swap_behaviour)
-        {
-          CownSwapper::set_swapped(cown); // should probably check something
-        }
-        else
-        {
-          if (CownSwapper::set_in_memory(cown))
-          {
-            fetches[first_chain_index] = cown->fetch_behaviour;
-
-            auto slots = fetches[first_chain_index]->get_slots();
-            auto *s = new (&slots[0]) Slot(cown);
-
-            transfer_count += s->status;
-            s->set_behaviour(first_body);
-            first_body = fetches[first_chain_index];
-            fetched = true;
-          }
-        }
-
         // set_behaviour to the first_slot
         yield();
         if (prev == nullptr)
@@ -500,11 +479,6 @@ namespace verona::rt
           // this is wrong - should only do it for the last one
           Logging::cout() << "Acquired cown: " << cown << " for behaviour "
                           << body << Logging::endl;
-
-          if (fetched)
-            fetch_ec[first_chain_index]++;
-          else
-            ec[std::get<0>(indexes[first_chain_index])]++;
 
           yield();
 
@@ -524,6 +498,29 @@ namespace verona::rt
             // We didn't have any RCs passed in, so we need to acquire one.
             Cown::acquire(cown);
           }
+                  
+          if (body->is_swap_behaviour)
+          {
+            if (!CownSwapper::set_swapped(cown))
+              abort();
+          }
+          else
+          {
+            if (CownSwapper::set_in_memory(cown))
+            {
+              fetches[first_chain_index] = cown->fetch_behaviour;
+
+              auto& slot = fetches[first_chain_index]->get_slots()[0];
+
+              transfer_count += slot.status;
+              slot.set_behaviour(first_body);
+              first_body = fetches[first_chain_index];
+              fetch_ec[first_chain_index]++;
+            }
+            else
+              ec[std::get<0>(indexes[first_chain_index])]++;
+          }
+
           continue;
         }
 
@@ -544,6 +541,29 @@ namespace verona::rt
         for (int j = 0; j < transfer_count; j++)
           Cown::release(ThreadAlloc::get(), cown);
 
+
+
+        if (body->is_swap_behaviour)
+        {
+          if (!CownSwapper::set_swapped(cown))
+            abort();
+        }
+        else
+        {
+          if (CownSwapper::set_in_memory(cown))
+          {
+            fetches[first_chain_index] = cown->fetch_behaviour;
+
+            auto& slot = fetches[first_chain_index]->get_slots()[0];
+
+            transfer_count += slot.status;
+            slot.set_behaviour(first_body);
+            first_body = fetches[first_chain_index];
+          }
+        }
+        
+
+
         yield();
         prev->set_behaviour(first_body);
         yield();
@@ -559,10 +579,11 @@ namespace verona::rt
       {
         if (fetches[i] != nullptr)
         {
+          auto& slot = fetches[i]->get_slots()[0];
+          if (slot.is_wait())
+            slot.set_ready();
+
           fetches[i]->resolve(fetch_ec[i]);
-          auto slot = fetches[i]->get_slots();
-          if (slot->is_wait())
-            slot->set_ready();
         }
         yield();
         auto slot = std::get<1>(indexes[i]);
@@ -572,7 +593,7 @@ namespace verona::rt
           slot->set_ready();
       }
 
-      for (size_t i = 0; i < body_count; i++)
+       for (size_t i = 0; i < body_count; i++)
       {
         yield();
         bodies[i]->resolve(ec[i]);

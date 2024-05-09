@@ -45,6 +45,7 @@ namespace verona::cpp
   {
   private:
     T value;
+    std::atomic_uint16_t concurrent_serializers{0};
 
     template<typename... Args>
     ActualCown(Args&&... ts) : value(std::forward<Args>(ts)...)
@@ -72,6 +73,11 @@ namespace verona::cpp
 
     using BaseT = std::remove_pointer_t<T>;
   public:
+    ~ActualCown()
+    {
+      if constexpr (is_serializable::value)
+        delete value;
+    }
     struct is_serializable
     {
       constexpr static bool value = std::is_pointer_v<T> && has_serialize<BaseT>::value;
@@ -81,12 +87,15 @@ namespace verona::cpp
     {
       if constexpr (is_serializable::value)
       {
+        auto prev = concurrent_serializers.fetch_add(1, std::memory_order_acquire);
+        assert(prev == 0);
         T new_value = BaseT::serialize(value, archive);
 
         if (value != nullptr)
           delete value;
           
         value = new_value;
+        concurrent_serializers.fetch_sub(1, std::memory_order_release);
       }
     }
   };
@@ -445,7 +454,7 @@ namespace verona::cpp
     template<typename T2>
     friend class AccessBatch;
 
-  private:
+  public:
     /// Underlying cown that has been acquired.
     /// Runtime is actually holding this reference count.
     ActualCown<std::remove_const_t<T>>& origin_cown;

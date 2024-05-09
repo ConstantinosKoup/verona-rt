@@ -42,7 +42,9 @@ namespace verona::cpp
         static void set_fetch_behaviour(Cown *cown)
         {
             auto fetch_lambda = CownSwapper::get_fetch_lambda(cown);
-            BehaviourCore *fetch_behaviour = Behaviour::make<decltype(fetch_lambda)>(1, fetch_lambda);
+            Request requests[] = {Request::write(cown)};
+            BehaviourCore *fetch_behaviour = Behaviour::prepare_to_schedule<decltype(fetch_lambda)>
+                                            (1, requests, std::forward<decltype(fetch_lambda)>(fetch_lambda));
             CownSwapper::set_fetch_behaviour(cown, fetch_behaviour, dealloc_fetch<decltype(fetch_lambda)>);
         }
 
@@ -66,6 +68,10 @@ namespace verona::cpp
             schedule_swap_lambda(cown, std::forward<decltype(swap_lambda)>(swap_lambda));
         }
 
+
+        friend class CownMemoryThread;
+        
+    public:
         template<typename T>
         static Cown *get_cown_if_swappable(cown_ptr<T>& cown_ptr)
         {
@@ -75,10 +81,7 @@ namespace verona::cpp
 
             return cown;
         }
-
-        friend class CownMemoryThread;
         
-    public:
         template<typename T>
         static void schedule_swap(cown_ptr<T>& cown_ptr)
         {

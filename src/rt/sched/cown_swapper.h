@@ -44,13 +44,14 @@ namespace verona::rt
         {
             auto swap_lambda = [cown]()
             {
-                Logging::cout() << "Swapping cown " << cown << Logging::endl;
+                std::cout << "Swapping cown " << cown << std::endl;
                 auto cown_dir = get_cown_dir();
                 std::stringstream filename;
                 filename << cown << ".cown";
                 std::fstream ofs(cown_dir / filename.str(), std::ios::out | std::ios::binary);
-                
+
                 cown->serialize(ofs);
+                std::cout << "Done swapping cown " << cown << std::endl;
 
                 ofs.close();
             };
@@ -62,13 +63,14 @@ namespace verona::rt
         {
             return [cown]()
             {
-                Logging::cout() << "Fetching cown " << cown << Logging::endl;
+                std::cout << "Fetching cown " << cown << std::endl;
                 auto cown_dir = get_cown_dir();
                 std::stringstream filename;
                 filename << cown << ".cown";
                 std::fstream ifs(cown_dir / filename.str(), std::ios::in | std::ios::binary);
 
                 cown->serialize(ifs);
+                std::cout << "Done fetching cown " << cown << std::endl;
                 
                 ifs.close();
             };
@@ -77,29 +79,31 @@ namespace verona::rt
         static void register_cown(Cown *cown)
         {
             cown->weak_acquire();
-            // auto expected = SwapStatus::UNREGISTERED;
-            // return cown->swap_satus.compare_exchange_strong(expected, SwapStatus::IN_MEMORY, std::memory_order_acq_rel);
         }
 
         static void unregister_cown(Cown *cown)
         {
             cown->weak_release(ThreadAlloc::get());
-            // auto expected = SwapStatus::UNREGISTERED;
-            // return cown->swap_satus.compare_exchange_strong(expected, SwapStatus::IN_MEMORY, std::memory_order_acq_rel);
         }
 
         static bool set_swapped(Cown *cown)
         {
             auto expected = SwapStatus::IN_MEMORY;
-            return cown->swap_satus.compare_exchange_strong(expected, SwapStatus::ON_DISK, std::memory_order_acq_rel);
+            if (cown->swap_satus.compare_exchange_strong(expected, SwapStatus::ON_DISK, std::memory_order_acq_rel))
+            {
+                std::cout << "Scheduling swap for cown " << cown << std::endl;
+                return true;
+            }
+
+            return false;
         }
 
         static bool set_in_memory(Cown *cown)
         {
             auto expected = ON_DISK;
-            if (cown->swap_satus.compare_exchange_strong(expected, SwapStatus::IN_MEMORY, std::memory_order_acquire))
+            if (cown->swap_satus.compare_exchange_strong(expected, SwapStatus::IN_MEMORY, std::memory_order_acq_rel))
             {
-                Logging::cout() << "Scheduling fetch for cown " << cown << Logging::endl;
+                std::cout << "Scheduling fetch for cown " << cown << std::endl;
                 return true;
             }
 
