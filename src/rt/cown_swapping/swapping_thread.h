@@ -113,17 +113,9 @@ namespace verona::cpp
                     {
                         auto cown = cowns.front();
                         cowns.pop_front();
-                        if (!CownSwapper::acquire_strong(cown))
-                            continue;
-
-                        cowns.push_back(cown);
-                        if (CownSwapper::is_in_memory(cown))
-                        {
-                            ActualCownSwapper::schedule_swap(cown);
-                            ++count;
-                        }
-
-                        CownSwapper::release_strong(cown);
+                        if (ActualCownSwapper::schedule_swap(cown))
+                            CownSwapper::unregister_cown(cown);
+                        ++count;
                     }
                 }
 #ifdef USE_SYSTEMATIC_TESTING

@@ -20,6 +20,7 @@ namespace verona::cpp
         {
             Logging::cout() << "Scheduling swap for cown " << cown << Logging::endl;
             Request requests[] = {Request::write(cown)};
+            requests[0].mark_move();
             BehaviourCore *b = 
                 Behaviour::prepare_to_schedule<T>(1, requests, std::forward<T>(f), /* is_swap */ true);
             
@@ -48,6 +49,21 @@ namespace verona::cpp
             CownSwapper::set_fetch_behaviour(cown, fetch_behaviour, dealloc_fetch<decltype(fetch_lambda)>);
         }
 
+        static bool schedule_swap(Cown *cown)
+        {
+            if (!CownSwapper::acquire_strong(cown))
+                return false;
+            set_fetch_behaviour(cown);
+
+            auto swap_lambda = CownSwapper::get_swap_lambda(cown);
+            schedule_swap_lambda(cown, std::forward<decltype(swap_lambda)>(swap_lambda));
+            return true;
+        }
+
+
+        friend class CownMemoryThread;
+        
+    public:
         template<typename T>
         static Cown *register_cown(cown_ptr<T>& cown_ptr)
         {
@@ -60,18 +76,16 @@ namespace verona::cpp
             return cown;
         }
 
-        static void schedule_swap(Cown *cown)
+        template<typename T>
+        static void unregister_cown(cown_ptr<T>& cown_ptr)
         {
-            set_fetch_behaviour(cown);
+            if constexpr (! ActualCown<T>::is_serializable::value)
+                return;
 
-            auto swap_lambda = CownSwapper::get_swap_lambda(cown);
-            schedule_swap_lambda(cown, std::forward<decltype(swap_lambda)>(swap_lambda));
+            ActualCown<T>* cown = cown_ptr.allocated_cown;
+            CownSwapper::register_cown(cown);
         }
 
-
-        friend class CownMemoryThread;
-        
-    public:
         template<typename T>
         static Cown *get_cown_if_swappable(cown_ptr<T>& cown_ptr)
         {

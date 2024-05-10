@@ -259,6 +259,34 @@ namespace verona::rt
       return behaviour;
     }
 
+    // Returns if a fetch happened
+    inline static bool check_swap_status(BehaviourCore*& body, Cown*& cown, StackArray<BehaviourCore*>& fetches,
+                                         size_t& first_chain_index, BehaviourCore*& first_body, size_t& transfer_count)
+    {
+      if (body->is_swap_behaviour)
+      {
+        if (!CownSwapper::set_swapped(cown))
+          abort();
+      }
+      else
+      {
+        if (CownSwapper::set_in_memory(cown))
+        {
+          fetches[first_chain_index] = cown->fetch_behaviour;
+
+          auto& slot = fetches[first_chain_index]->get_slots()[0];
+
+          transfer_count += slot.status;
+          slot.set_behaviour(first_body);
+          first_body = fetches[first_chain_index];
+
+          return true;
+        }
+      }
+
+      return false;
+    }
+
     /**
      * @brief Schedule a behaviour for execution.
      *
@@ -482,6 +510,11 @@ namespace verona::rt
 
           yield();
 
+          if (check_swap_status(body, cown, fetches, first_chain_index, first_body, transfer_count))
+            fetch_ec[first_chain_index]++;
+          else
+            ec[std::get<0>(indexes[first_chain_index])]++;
+
           if (transfer_count)
           {
             Logging::cout() << "Releasing transferred count " << transfer_count
@@ -498,28 +531,6 @@ namespace verona::rt
             // We didn't have any RCs passed in, so we need to acquire one.
             Cown::acquire(cown);
           }
-                  
-          if (body->is_swap_behaviour)
-          {
-            if (!CownSwapper::set_swapped(cown))
-              abort();
-          }
-          else
-          {
-            if (CownSwapper::set_in_memory(cown))
-            {
-              fetches[first_chain_index] = cown->fetch_behaviour;
-
-              auto& slot = fetches[first_chain_index]->get_slots()[0];
-
-              transfer_count += slot.status;
-              slot.set_behaviour(first_body);
-              first_body = fetches[first_chain_index];
-              fetch_ec[first_chain_index]++;
-            }
-            else
-              ec[std::get<0>(indexes[first_chain_index])]++;
-          }
 
           continue;
         }
@@ -535,35 +546,14 @@ namespace verona::rt
           Systematic::yield_until([prev]() { return !prev->is_wait(); });
         }
 
+        check_swap_status(body, cown, fetches, first_chain_index, first_body, transfer_count);
+
         Logging::cout() << "Releasing transferred count " << transfer_count
                         << Logging::endl;
         // Release as many times as indicated
         for (int j = 0; j < transfer_count; j++)
           Cown::release(ThreadAlloc::get(), cown);
-
-
-
-        if (body->is_swap_behaviour)
-        {
-          if (!CownSwapper::set_swapped(cown))
-            abort();
-        }
-        else
-        {
-          if (CownSwapper::set_in_memory(cown))
-          {
-            fetches[first_chain_index] = cown->fetch_behaviour;
-
-            auto& slot = fetches[first_chain_index]->get_slots()[0];
-
-            transfer_count += slot.status;
-            slot.set_behaviour(first_body);
-            first_body = fetches[first_chain_index];
-          }
-        }
         
-
-
         yield();
         prev->set_behaviour(first_body);
         yield();

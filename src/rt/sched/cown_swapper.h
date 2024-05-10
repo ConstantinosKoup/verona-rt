@@ -44,14 +44,12 @@ namespace verona::rt
         {
             auto swap_lambda = [cown]()
             {
-                std::cout << "Swapping cown " << cown << std::endl;
                 auto cown_dir = get_cown_dir();
                 std::stringstream filename;
                 filename << cown << ".cown";
                 std::fstream ofs(cown_dir / filename.str(), std::ios::out | std::ios::binary);
 
                 cown->serialize(ofs);
-                std::cout << "Done swapping cown " << cown << std::endl;
 
                 ofs.close();
             };
@@ -63,14 +61,12 @@ namespace verona::rt
         {
             return [cown]()
             {
-                std::cout << "Fetching cown " << cown << std::endl;
                 auto cown_dir = get_cown_dir();
                 std::stringstream filename;
                 filename << cown << ".cown";
                 std::fstream ifs(cown_dir / filename.str(), std::ios::in | std::ios::binary);
 
                 cown->serialize(ifs);
-                std::cout << "Done fetching cown " << cown << std::endl;
                 
                 ifs.close();
             };
@@ -91,7 +87,6 @@ namespace verona::rt
             auto expected = SwapStatus::IN_MEMORY;
             if (cown->swap_satus.compare_exchange_strong(expected, SwapStatus::ON_DISK, std::memory_order_acq_rel))
             {
-                std::cout << "Scheduling swap for cown " << cown << std::endl;
                 return true;
             }
 
@@ -103,7 +98,6 @@ namespace verona::rt
             auto expected = ON_DISK;
             if (cown->swap_satus.compare_exchange_strong(expected, SwapStatus::IN_MEMORY, std::memory_order_acq_rel))
             {
-                std::cout << "Scheduling fetch for cown " << cown << std::endl;
                 return true;
             }
 
