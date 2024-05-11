@@ -40,20 +40,20 @@ namespace verona::cpp
             work->dealloc();
         }
 
-        static void set_fetch_behaviour(Cown *cown)
+        static void set_fetch_behaviour(Cown *cown, std::function<void(Cown *)> register_to_thread)
         {
-            auto fetch_lambda = CownSwapper::get_fetch_lambda(cown);
+            auto fetch_lambda = CownSwapper::get_fetch_lambda(cown, register_to_thread);
             Request requests[] = {Request::write(cown)};
             BehaviourCore *fetch_behaviour = Behaviour::prepare_to_schedule<decltype(fetch_lambda)>
                                             (1, requests, std::forward<decltype(fetch_lambda)>(fetch_lambda));
             CownSwapper::set_fetch_behaviour(cown, fetch_behaviour, dealloc_fetch<decltype(fetch_lambda)>);
         }
 
-        static bool schedule_swap(Cown *cown)
+        static bool schedule_swap(Cown *cown, std::function<void(Cown *)> register_to_thread)
         {
             if (!CownSwapper::acquire_strong(cown))
                 return false;
-            set_fetch_behaviour(cown);
+            set_fetch_behaviour(cown, register_to_thread);
 
             auto swap_lambda = CownSwapper::get_swap_lambda(cown);
             schedule_swap_lambda(cown, std::forward<decltype(swap_lambda)>(swap_lambda));
@@ -106,7 +106,7 @@ namespace verona::cpp
                 return;
             }
             
-            schedule_swap(cown);
+            schedule_swap(cown, [](Cown *cown){});
         }
     };
 

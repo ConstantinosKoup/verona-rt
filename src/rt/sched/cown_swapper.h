@@ -57,9 +57,9 @@ namespace verona::rt
             return swap_lambda;
         }
 
-        static auto get_fetch_lambda(Cown *cown)
+        static auto get_fetch_lambda(Cown *cown, std::function<void(Cown *)> register_to_thread)
         {
-            return [cown]()
+            return [cown, register_to_thread]()
             {
                 auto cown_dir = get_cown_dir();
                 std::stringstream filename;
@@ -69,6 +69,9 @@ namespace verona::rt
                 cown->serialize(ifs);
                 
                 ifs.close();
+
+                register_cown(cown);
+                register_to_thread(cown);
             };
         }
 

@@ -113,7 +113,9 @@ namespace verona::cpp
                     {
                         auto cown = cowns.front();
                         cowns.pop_front();
-                        if (ActualCownSwapper::schedule_swap(cown))
+                        if (ActualCownSwapper::schedule_swap(cown, [this](Cown *cown) 
+                                                                        { cowns.push_back(cown);
+                                                                        auto foo = 0; }))
                             CownSwapper::unregister_cown(cown);
                         ++count;
                     }
