@@ -37,7 +37,7 @@ namespace verona::rt
         }
         static bool is_in_memory(Cown *cown)
         {
-            return cown->swap_satus.load(std::memory_order_relaxed) == SwapStatus::IN_MEMORY;
+            return !cown->swapped;
         }
 
         static auto get_swap_lambda(Cown* cown)
@@ -87,9 +87,9 @@ namespace verona::rt
 
         static bool set_swapped(Cown *cown)
         {
-            auto expected = SwapStatus::IN_MEMORY;
-            if (cown->swap_satus.compare_exchange_strong(expected, SwapStatus::ON_DISK, std::memory_order_acq_rel))
+            if (!cown->swapped)
             {
+                cown->swapped = true;
                 return true;
             }
 
@@ -98,9 +98,9 @@ namespace verona::rt
 
         static bool set_in_memory(Cown *cown)
         {
-            auto expected = ON_DISK;
-            if (cown->swap_satus.compare_exchange_strong(expected, SwapStatus::IN_MEMORY, std::memory_order_acq_rel))
+            if (cown->swapped)
             {
+                cown->swapped = false;
                 return true;
             }
 

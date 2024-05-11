@@ -13,10 +13,6 @@
 namespace verona::rt
 {
   class BehaviourCore;
-  enum SwapStatus {
-    IN_MEMORY,
-    ON_DISK,
-  };
 
   /**
    * Shared wrapper that encapsulates the implementation of memory management
@@ -41,9 +37,9 @@ namespace verona::rt
      **/
     std::atomic<size_t> weak_count{1};
 
-    std::atomic<SwapStatus> swap_satus{SwapStatus::IN_MEMORY};
     BehaviourCore *fetch_behaviour{nullptr};
     void (*fetch_deallocator)(BehaviourCore *);
+    bool swapped{false};
 
     friend class BehaviourCore;
     friend class CownSwapper;
@@ -83,7 +79,7 @@ namespace verona::rt
 
 
       // If cown was left on disk we need to deallocate the pre-allocated fetch behaviour
-      if (o->swap_satus.load(std::memory_order_relaxed) == SwapStatus::ON_DISK)
+      if (o->swapped)
         o->fetch_deallocator(o->fetch_behaviour);
 
       o->queue_collect(alloc);
