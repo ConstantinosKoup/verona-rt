@@ -34,10 +34,7 @@ namespace verona::cpp
         std::atomic_bool registered{false};
         size_t nothing_loop_count{0};
 #endif
-
         CownMemoryThread() = default;
-
-
 
 #ifdef _WIN32
         // Function to get memory usage for Windows
@@ -85,7 +82,6 @@ namespace verona::cpp
                 cowns.pop_front();
             }
         }
-           
 
         void monitorMemoryUsage() {
             size_t count = 0;
@@ -96,7 +92,6 @@ namespace verona::cpp
                 long memory_usage_MB = getMemoryUsage() / 1024;
 
                 // Print memory usage
-
 #ifdef USE_SYSTEMATIC_TESTING
                 Logging::cout() << "Memory Usage: " << memory_usage_MB << " MB" << Logging::endl;
 #else
@@ -105,7 +100,6 @@ namespace verona::cpp
 #endif
 
                 yield();
-
                 if (memory_limit_MB == 0)
                     unregister_cowns();
                 else if (memory_usage_MB >= memory_limit_MB * 9 / 10)
@@ -232,7 +226,5 @@ namespace verona::cpp
 #endif
             return true;
         }
-
-    
     };
 } // namespace verona::cpp

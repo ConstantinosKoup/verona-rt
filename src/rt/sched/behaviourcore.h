@@ -515,6 +515,8 @@ namespace verona::rt
           else
             ec[std::get<0>(indexes[first_chain_index])]++;
 
+          yield();
+
           if (transfer_count)
           {
             Logging::cout() << "Releasing transferred count " << transfer_count
@@ -531,7 +533,6 @@ namespace verona::rt
             // We didn't have any RCs passed in, so we need to acquire one.
             Cown::acquire(cown);
           }
-
           continue;
         }
 
@@ -553,7 +554,7 @@ namespace verona::rt
         // Release as many times as indicated
         for (int j = 0; j < transfer_count; j++)
           Cown::release(ThreadAlloc::get(), cown);
-        
+
         yield();
         prev->set_behaviour(first_body);
         yield();
@@ -583,7 +584,7 @@ namespace verona::rt
           slot->set_ready();
       }
 
-       for (size_t i = 0; i < body_count; i++)
+      for (size_t i = 0; i < body_count; i++)
       {
         yield();
         bodies[i]->resolve(ec[i]);

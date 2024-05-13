@@ -79,7 +79,6 @@ class Store
     {
       delete[] bodies;
     }
-    
 };
 
 
@@ -108,18 +107,14 @@ void test_body(SystematicTestHarness *harness)
       {
         auto body = b.get_ref();
         yield();
-        Logging::cout() << "Reading address: " << &b.origin_cown << Logging::endl;
         Logging::cout() << "Reading id: " << body->get_id() << Logging::endl;
       };
     }
   };
-
-
 }
 
 int main(int argc, char** argv)
 {
-
   SystematicTestHarness harness(argc, argv);
 
   harness.run(test_body, &harness);
