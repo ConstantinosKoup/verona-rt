@@ -28,16 +28,27 @@ namespace verona::rt
         }
 
     public:
+        static void clear_cown_dir()
+        {
+            namespace fs = std::filesystem;
+            auto cown_dir = get_cown_dir();
+
+            fs::remove_all(cown_dir);
+        }
+        static bool is_in_memory(Cown *cown)
+        {
+            return !cown->swapped;
+        }
+
         static auto get_swap_lambda(Cown* cown)
         {
             auto swap_lambda = [cown]()
             {
-                Logging::cout() << "Swapping cown " << cown << Logging::endl;
                 auto cown_dir = get_cown_dir();
                 std::stringstream filename;
                 filename << cown << ".cown";
                 std::fstream ofs(cown_dir / filename.str(), std::ios::out | std::ios::binary);
-                
+
                 cown->serialize(ofs);
 
                 ofs.close();
@@ -46,11 +57,10 @@ namespace verona::rt
             return swap_lambda;
         }
 
-        static auto get_fetch_lambda(Cown *cown)
+        static auto get_fetch_lambda(Cown *cown, std::function<void(Cown *)> register_to_thread)
         {
-            return [cown]()
+            return [cown, register_to_thread]()
             {
-                Logging::cout() << "Fetching cown " << cown << Logging::endl;
                 auto cown_dir = get_cown_dir();
                 std::stringstream filename;
                 filename << cown << ".cown";
@@ -59,25 +69,56 @@ namespace verona::rt
                 cown->serialize(ifs);
                 
                 ifs.close();
+
+                register_cown(cown);
+                register_to_thread(cown);
             };
         }
 
-        static void set_swapped(Cown *cown)
+        static void register_cown(Cown *cown)
         {
-            auto expected = SwapStatus::IN_MEMORY;
-            cown->swap_satus.compare_exchange_strong(expected, SwapStatus::ON_DISK, std::memory_order_acq_rel);
+            cown->weak_acquire();
         }
 
-        static bool set_in_memory(Cown *cown)
+        static void unregister_cown(Cown *cown)
         {
-            auto expected = ON_DISK;
-            if (cown->swap_satus.compare_exchange_strong(expected, SwapStatus::IN_MEMORY, std::memory_order_acquire))
+            cown->weak_release(ThreadAlloc::get());
+        }
+
+        static bool set_swapped(Cown *cown)
+        {
+            if (!cown->swapped)
             {
-                Logging::cout() << "Scheduling fetch for cown " << cown << Logging::endl;
+                cown->swapped = true;
                 return true;
             }
 
             return false;
+        }
+
+        static bool set_in_memory(Cown *cown)
+        {
+            if (cown->swapped)
+            {
+                cown->swapped = false;
+                return true;
+            }
+
+            return false;
+        }
+
+        static bool acquire_strong(Cown *cown)
+        {
+            auto succeeded = cown->acquire_strong_from_weak();
+            if (!succeeded)
+                unregister_cown(cown);
+
+            return succeeded;
+        }
+
+        static void release_strong(Cown *cown)
+        {
+            Shared::release(ThreadAlloc::get(), cown);
         }
 
         static void set_fetch_behaviour(Cown *cown, BehaviourCore *fetch_behaviour, void (*fetch_deallocator)(BehaviourCore *))

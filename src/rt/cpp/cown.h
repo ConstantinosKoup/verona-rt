@@ -72,6 +72,11 @@ namespace verona::cpp
 
     using BaseT = std::remove_pointer_t<T>;
   public:
+    ~ActualCown()
+    {
+      if constexpr (is_serializable::value)
+        delete value;
+    }
     struct is_serializable
     {
       constexpr static bool value = std::is_pointer_v<T> && has_serialize<BaseT>::value;

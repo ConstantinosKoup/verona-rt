@@ -8,6 +8,8 @@
 #include <test/opt.h>
 #include <verona.h>
 
+#include "cown_swapping/swapping_thread.h"
+
 using namespace verona::rt;
 using namespace verona::rt::api;
 using namespace std::chrono;
@@ -160,6 +162,8 @@ public:
       f(std::forward<Args>(args)...);
 
       sched.run();
+
+      verona::cpp::CownMemoryThread::stop_monitoring();
 
       Logging::cout() << "Joining external threads" << std::endl;
 
