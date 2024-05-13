@@ -18,75 +18,13 @@
 
 namespace verona::cpp
 {
-    // temporary
-    template <typename T> 
-class TSQueue { 
-private: 
-    // Underlying queue 
-    std::queue<T> m_queue; 
-  
-    // mutex for thread synchronization 
-    std::mutex m_mutex; 
-  
-    // Condition variable for signaling 
-    std::condition_variable m_cond; 
-  
-public: 
-    size_t size()
-    {
-        std::unique_lock<std::mutex> lock(m_mutex);
-
-        return m_queue.size();
-    }
-
-    bool empty()
-    {
-        std::unique_lock<std::mutex> lock(m_mutex);
-
-        return m_queue.empty();
-    }
-
-    // Pushes an element to the queue 
-    void push(T item) 
-    { 
-  
-        // Acquire lock 
-        std::unique_lock<std::mutex> lock(m_mutex); 
-  
-        // Add item 
-        m_queue.push(item); 
-  
-        // Notify one thread that 
-        // is waiting 
-        m_cond.notify_one(); 
-    } 
-  
-    // Pops an element off the queue 
-    T pop() 
-    { 
-  
-        // acquire lock 
-        std::unique_lock<std::mutex> lock(m_mutex); 
-  
-        // wait until queue is not empty 
-        m_cond.wait(lock, 
-                    [this]() { return !m_queue.empty(); }); 
-  
-        // retrieve item 
-        T item = m_queue.front(); 
-        m_queue.pop(); 
-  
-        // return item 
-        return item; 
-    } 
-}; 
-  
     using namespace verona::rt;
 
     class CownMemoryThread
     {
     private:
-        TSQueue<Cown*> cowns;
+        std::deque<Cown*> cowns;
+        std::mutex cowns_mutex;
         std::thread monitoring_thread;
         size_t memory_limit_MB;
         std::atomic_bool keep_monitoring;
@@ -140,9 +78,11 @@ public:
 
         void unregister_cowns()
         {
+            std::unique_lock<std::mutex> lock(cowns_mutex);
             while (!cowns.empty())
             {
-                CownSwapper::unregister_cown(cowns.pop());
+                CownSwapper::unregister_cown(cowns.front());
+                cowns.pop_front();
             }
         }
            
@@ -171,11 +111,16 @@ public:
                 else if (memory_usage_MB >= memory_limit_MB * 9 / 10)
                 {
                     auto count = 0;
+                    std::unique_lock<std::mutex> lock(cowns_mutex);
                     for (int i = 0; i < cowns.size() && count < 4; ++i)
                     {
-                        auto cown = cowns.pop();
+                        auto cown = cowns.front();
+                        cowns.pop_front();
                         if (ActualCownSwapper::schedule_swap(cown, [this](Cown *cown) 
-                                                                        { cowns.push(cown); }))
+                                                                         { 
+                                                                            std::unique_lock<std::mutex> lock(cowns_mutex);
+                                                                            cowns.push_back(cown); 
+                                                                        }))
                             CownSwapper::unregister_cown(cown);
                         ++count;
                     }
@@ -276,7 +221,8 @@ public:
                 if (cown == nullptr)
                     return false;
 
-                ref.cowns.push(cown);
+                std::unique_lock<std::mutex> lock(ref.cowns_mutex);
+                ref.cowns.push_front(cown);
             }
 
         // In systematic testing, stop monitoring never gets called because it waits until all threads terminate before
