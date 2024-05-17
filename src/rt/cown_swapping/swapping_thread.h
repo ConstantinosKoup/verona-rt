@@ -199,6 +199,11 @@ namespace verona::cpp
             ref.keep_monitoring.store(false, std::memory_order_acq_rel);
         }
 
+        static void join()
+        {
+            get_ref().monitoring_thread.join();
+        }
+
         template<typename T>
         static bool register_cowns(size_t count, cown_ptr<T>* cown_ptrs)
         {
