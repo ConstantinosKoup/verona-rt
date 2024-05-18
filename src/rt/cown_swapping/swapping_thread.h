@@ -29,11 +29,15 @@ namespace verona::cpp
         size_t memory_limit_MB;
         std::atomic_bool keep_monitoring;
         std::atomic_bool running{false};
+        bool debug{false};
+        std::condition_variable cv;
 
 #ifdef USE_SYSTEMATIC_TESTING
         std::atomic_bool registered{false};
         size_t nothing_loop_count{0};
 #endif
+
+    private:
         CownMemoryThread() = default;
 
 #ifdef _WIN32
@@ -95,18 +99,20 @@ namespace verona::cpp
 #ifdef USE_SYSTEMATIC_TESTING
                 Logging::cout() << "Memory Usage: " << memory_usage_MB << " MB" << Logging::endl;
 #else
-                if (count++ % 20 == 0)
+                if (count++ % 1000 == 0)
                     std::cout << "Memory Usage: " << memory_usage_MB << " MB" << std::endl;
 #endif
 
                 yield();
                 if (memory_limit_MB == 0)
+                {
                     unregister_cowns();
+                    cv.notify_all();
+                }
                 else if (memory_usage_MB >= memory_limit_MB * 9 / 10)
                 {
-                    auto count = 0;
                     std::unique_lock<std::mutex> lock(cowns_mutex);
-                    for (int i = 0; i < cowns.size() && count < 4; ++i)
+                    if (!cowns.empty())
                     {
                         auto cown = cowns.front();
                         cowns.pop_front();
@@ -116,16 +122,19 @@ namespace verona::cpp
                                                                             cowns.push_back(cown); 
                                                                         }))
                             CownSwapper::unregister_cown(cown);
-                        ++count;
                     }
                 }
 #ifdef USE_SYSTEMATIC_TESTING
                 else if (registered.load(std::memory_order_relaxed) && nothing_loop_count++ > 20)
                     break;
+#endif
+                else
+                    cv.notify_all();
 
+#ifdef USE_SYSTEMATIC_TESTING
                 yield();
 #else
-                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
 #endif
             }
 
@@ -139,6 +148,7 @@ namespace verona::cpp
             this->keep_monitoring = true;
             this->memory_limit_MB = memory_limit_MB;
             this->running = true;
+            this->debug = debug;
 
 #ifdef USE_SYSTEMATIC_TESTING
             this->registered = false;
@@ -173,6 +183,11 @@ namespace verona::cpp
             ref.reset(memory_limit_MB);
         }
 
+        static void wait(std::unique_lock<std::mutex> lock)
+        {
+            get_ref().cv.wait(lock);
+        }
+
         static auto create_debug(size_t memory_limit_MB = 0)
         {
             auto& ref = get_ref();
@@ -197,11 +212,9 @@ namespace verona::cpp
 
             ref.running.store(false, std::memory_order_acq_rel);
             ref.keep_monitoring.store(false, std::memory_order_acq_rel);
-        }
 
-        static void join()
-        {
-            get_ref().monitoring_thread.join();
+            if (!ref.debug)
+                ref.monitoring_thread.join();
         }
 
         template<typename T>
