@@ -90,6 +90,8 @@ namespace verona::cpp
         void monitorMemoryUsage() {
             size_t count = 0;
 
+            schedule_lambda([](){ Scheduler::add_external_event_source(); });
+
             while (keep_monitoring.load(std::memory_order_relaxed))
             {
                 // Get memory usage
@@ -140,6 +142,8 @@ namespace verona::cpp
 
             Logging::cout() << "Monitoring thread terminated" << Logging::endl;
             unregister_cowns();
+
+            schedule_lambda([](){ Scheduler::remove_external_event_source(); });
         }
         
         void reset(size_t memory_limit_MB, bool debug = false)

@@ -13,11 +13,10 @@ using namespace verona::cpp;
 
 constexpr size_t COWN_NUMBER = 10000;
 constexpr size_t COWN_DATA_SIZE = 1000000;
-constexpr size_t COWNS_PER_BEHAVIOUR = 1;
+constexpr size_t COWNS_PER_BEHAVIOUR = 3;
 constexpr size_t BEHAVIOUR_RUNTIME_MS = 1;
-constexpr size_t LOAD = 1;
-constexpr size_t MAX_WEIGHT = 20;
-constexpr size_t MEMORY_LIMIT_MB = 1000;
+constexpr size_t MEMORY_LIMIT_MB = 5000;
+constexpr double STANDARD_DEVIATION = COWN_NUMBER / 10.0;
 constexpr size_t THREAD_NUMBER = 10;
 constexpr size_t TOTAL_BEHAVIOURS = 1000;
 constexpr size_t INTER_ARRIVAL_MS = 10;
@@ -64,21 +63,28 @@ public:
   }
 };
 
-void init_bodies(cown_ptr<Body*> *bodies, std::array<size_t, COWN_NUMBER>& probabilities)
+void init_bodies(cown_ptr<Body*> *bodies)
 {
   for (size_t i = 0; i < COWN_NUMBER; ++i)
-  {
     bodies[i] = make_cown<Body*>(new Body(i, COWN_DATA_SIZE));
-    probabilities[i] = std::rand() % MAX_WEIGHT == MAX_WEIGHT - 1 ? MAX_WEIGHT : 1;
-    // probabilities[i] = std::rand() % MAX_WEIGHT;
-  }
 
   CownMemoryThread::register_cowns(COWN_NUMBER, bodies);
 }
 
-void behaviour_spawning_thread(
-                                cown_ptr<Body*> *bodies,
-                                std::discrete_distribution<> d,
+size_t get_normal_index() {
+    static std::default_random_engine generator(static_cast<long unsigned int>(time(0)));
+    std::normal_distribution<double> distribution(COWN_NUMBER / 2, STANDARD_DEVIATION);
+
+    int index;
+    do {
+        index = static_cast<int>(distribution(generator));
+    } while (index < 0 || index >= COWN_NUMBER);  // Ensure index is within bounds
+
+    return index;
+}
+
+
+void behaviour_spawning_thread(cown_ptr<Body*> *bodies,
                                 std::atomic_int64_t& latency,
                                 std::chrono::time_point<std::chrono::high_resolution_clock>& global_start,
                                 std::atomic<std::chrono::time_point<std::chrono::high_resolution_clock>>& global_end)
@@ -100,7 +106,14 @@ void behaviour_spawning_thread(
   for (size_t i = 0; i < TOTAL_BEHAVIOURS; ++i)
   {
     auto start = std::chrono::high_resolution_clock::now();
-    when(bodies[d(gen)]) << [&](auto b)
+      
+    cown_ptr<Body *> carray[COWNS_PER_BEHAVIOUR];
+    for (size_t j = 0; j < COWNS_PER_BEHAVIOUR; ++j)
+      carray[j] = bodies[get_normal_index()];
+
+    cown_array<Body *> ca{carray, COWNS_PER_BEHAVIOUR};
+
+    when(ca) << [&](...)
     {
       std::this_thread::sleep_for(std::chrono::milliseconds(BEHAVIOUR_RUNTIME_MS));
       auto end = std::chrono::high_resolution_clock::now();
@@ -115,6 +128,7 @@ void behaviour_spawning_thread(
   when() << []()
   {
     Scheduler::remove_external_event_source();
+    CownMemoryThread::stop_monitoring();
   };
 }
 
@@ -126,22 +140,16 @@ int main()
   std::atomic<std::chrono::time_point<std::chrono::high_resolution_clock>> global_end;
 
   cown_ptr<Body*> *bodies = new cown_ptr<Body*>[COWN_NUMBER];
-  std::array<size_t, COWN_NUMBER> probabilities;
 
   Scheduler& sched = Scheduler::get();
   sched.init(THREAD_NUMBER);
 
   CownMemoryThread::create(MEMORY_LIMIT_MB);
-  init_bodies(bodies, probabilities);
+  init_bodies(bodies);
 
-  std::discrete_distribution<> d(probabilities.begin(), probabilities.end());
-  std::thread bs(behaviour_spawning_thread, bodies, d, std::ref(latency), std::ref(global_start), std::ref(global_end));
-
+  std::thread bs(behaviour_spawning_thread, bodies, std::ref(latency), std::ref(global_start), std::ref(global_end));
   sched.run();
-
   bs.join();
-  CownMemoryThread::stop_monitoring();
-  delete[] bodies;
 
   struct group_thousands : std::numpunct<char> 
   { std::string do_grouping() const override { return "\3"; } };
@@ -157,6 +165,7 @@ int main()
   std::cout << "Throughput: " << std::fixed << std::setprecision(3)
               << throughput << " behaviours per second" << std::endl;
 
+  delete[] bodies;
 
   return 0;
 }
