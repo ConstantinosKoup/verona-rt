@@ -11,15 +11,17 @@
 using namespace verona::rt;
 using namespace verona::cpp;
 
+const std::string BENCHMARK_NAME = "round-robin";
 constexpr size_t COWN_NUMBER = 10000;
 constexpr size_t COWN_DATA_SIZE = 1000000;
 constexpr size_t COWNS_PER_BEHAVIOUR = 2;
 constexpr size_t BEHAVIOUR_RUNTIME_MS = 5;
 constexpr size_t MEMORY_LIMIT_MB = 5000;
-constexpr double STANDARD_DEVIATION = COWN_NUMBER / 4.0;
+constexpr double STANDARD_DEVIATION = COWN_NUMBER / 6.0;
 constexpr size_t THREAD_NUMBER = 16;
-constexpr size_t TOTAL_BEHAVIOURS = 100000;
+constexpr size_t TOTAL_BEHAVIOURS = 1000000;
 constexpr size_t INTER_ARRIVAL_MICROSECS = 500;
+constexpr bool WRITE_TO_FILE = false;
 
 class Body
 {
@@ -105,7 +107,7 @@ void behaviour_spawning_thread(cown_ptr<Body*> *bodies,
 
   for (size_t i = 0; i < TOTAL_BEHAVIOURS; ++i)
   {
-    auto start = std::chrono::high_resolution_clock::now();
+    auto spawn_time = std::chrono::high_resolution_clock::now();
       
     cown_ptr<Body *> carray[COWNS_PER_BEHAVIOUR];
     for (size_t j = 0; j < COWNS_PER_BEHAVIOUR; ++j)
@@ -115,11 +117,11 @@ void behaviour_spawning_thread(cown_ptr<Body*> *bodies,
 
     when(ca) << [&](...)
     {
+
       std::this_thread::sleep_for(std::chrono::milliseconds(BEHAVIOUR_RUNTIME_MS));
 
       auto end = std::chrono::high_resolution_clock::now();
-
-      latency.fetch_add(std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
+      latency.fetch_add(std::chrono::duration_cast<std::chrono::microseconds>(end - spawn_time).count());
       global_end.store(end, std::memory_order_acq_rel);
     };
 
@@ -159,12 +161,56 @@ int main()
   long double total_runtime = 
     std::chrono::duration_cast<std::chrono::seconds>(global_end.load() - global_start).count();
   long double throughput = (long double) TOTAL_BEHAVIOURS / total_runtime;
-  long double average_latency_s = (long double) latency.load() / TOTAL_BEHAVIOURS / std::pow(10, 6);
+  long double average_latency_s = (long double) latency.load() / TOTAL_BEHAVIOURS;
+
+  if constexpr (WRITE_TO_FILE)
+  {
+    if (!std::filesystem::exists("results.csv"))
+    {
+      std::ofstream csv("results.csv");
+      std::stringstream csv_out;
+      csv_out << "BENCHMARK_NAME" << ','
+              << "COWN_NUMBER" << ','
+              << "COWN_DATA_SIZE" << ','
+              << "COWNS_PER_BEHAVIOUR" << ','
+              << "BEHAVIOUR_RUNTIME_MS" << ','
+              << "MEMORY_LIMIT_MB" << ','
+              << "STANDARD_DEVIATION" << ','
+              << "THREAD_NUMBER" << ','
+              << "TOTAL_BEHAVIOURS" << ','
+              << "INTER_ARRIVAL_MICROSECS" << ','
+              << "total_runtime" << ','
+              << "average_latency_s" << ','
+              << "throughput" << ',' << std::endl;
+
+      csv << csv_out.str();
+      csv.close();
+    }
+
+    std::ofstream csv("results.csv", std::ios::app);
+    std::stringstream csv_out;
+    csv_out << BENCHMARK_NAME << ','
+            << COWN_NUMBER << ','
+            << COWN_DATA_SIZE << ','
+            << COWNS_PER_BEHAVIOUR << ','
+            << BEHAVIOUR_RUNTIME_MS << ','
+            << MEMORY_LIMIT_MB << ','
+            << STANDARD_DEVIATION << ','
+            << THREAD_NUMBER << ','
+            << TOTAL_BEHAVIOURS << ','
+            << INTER_ARRIVAL_MICROSECS << ','
+            << total_runtime << ','
+            << average_latency_s << ','
+            << throughput << ',' << std::endl;
+
+    csv << csv_out.str();
+    csv.close();
+  }
 
   std::cout << "Benchmark runtime: " << std::fixed << std::setprecision(3)
             << total_runtime << " seconds" << std::endl;
   std::cout << "Average latency: " << std::fixed << std::setprecision(3)
-              << average_latency_s  << " milliseconds" << std::endl;
+              << average_latency_s  << " microseconds" << std::endl;
   std::cout << "Throughput: " << std::fixed << std::setprecision(3)
               << throughput << " behaviours per second" << std::endl;
   delete[] bodies;
