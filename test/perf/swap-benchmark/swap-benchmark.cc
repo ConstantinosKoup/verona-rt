@@ -11,17 +11,17 @@
 using namespace verona::rt;
 using namespace verona::cpp;
 
-const std::string BENCHMARK_NAME = "round-robin";
+const std::string BENCHMARK_NAME = "least-accessed";
 constexpr size_t COWN_NUMBER = 10000;
 constexpr size_t COWN_DATA_SIZE = 1000000;
 constexpr size_t COWNS_PER_BEHAVIOUR = 2;
 constexpr size_t BEHAVIOUR_RUNTIME_MS = 5;
 constexpr size_t MEMORY_LIMIT_MB = 5000;
-constexpr double STANDARD_DEVIATION = COWN_NUMBER / 6.0;
+constexpr double STANDARD_DEVIATION = COWN_NUMBER / 15.0;
 constexpr size_t THREAD_NUMBER = 16;
 constexpr size_t TOTAL_BEHAVIOURS = 1000000;
 constexpr size_t INTER_ARRIVAL_MICROSECS = 500;
-constexpr bool WRITE_TO_FILE = false;
+constexpr bool WRITE_TO_FILE = true;
 
 class Body
 {
@@ -137,7 +137,7 @@ void behaviour_spawning_thread(cown_ptr<Body*> *bodies,
 
 int main()
 {
-  std::srand(32);
+  std::srand(std::chrono::system_clock::now().time_since_epoch().count());
   std::atomic_int64_t latency{0};
   std::chrono::time_point<std::chrono::high_resolution_clock> global_start;
   std::atomic<std::chrono::time_point<std::chrono::high_resolution_clock>> global_end;

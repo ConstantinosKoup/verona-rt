@@ -23,8 +23,7 @@ namespace verona::cpp
     class CownMemoryThread
     {
     private:
-        // std::vector<Cown*> cowns;
-        std::deque<Cown*> cowns;
+        std::vector<Cown*> cowns;
         std::mutex cowns_mutex;
         std::thread monitoring_thread;
         size_t memory_limit_MB;
@@ -83,10 +82,8 @@ namespace verona::cpp
             std::unique_lock<std::mutex> lock(cowns_mutex);
             while (!cowns.empty())
             {
-                // CownSwapper::unregister_cown(cowns.back());
-                // cowns.pop_back();
-                CownSwapper::unregister_cown(cowns.front());
-                cowns.pop_front();
+                CownSwapper::unregister_cown(cowns.back());
+                cowns.pop_back();
             }
         }
 
@@ -117,11 +114,9 @@ namespace verona::cpp
                     std::unique_lock<std::mutex> lock(cowns_mutex);
                     if (!cowns.empty())
                     {
-                        // auto min_cown_it = std::min_element(cowns.begin(), cowns.end(), CownSwapper::num_accesses_comparator);
-                        // auto cown = *min_cown_it;
-                        // cowns.erase(min_cown_it);
-                        auto cown = cowns.front();
-                        cowns.pop_front();
+                        auto min_cown_it = std::min_element(cowns.begin(), cowns.end(), CownSwapper::num_accesses_comparator);
+                        auto cown = *min_cown_it;
+                        cowns.erase(min_cown_it);
                         if (ActualCownSwapper::schedule_swap(cown, [this](Cown *cown) 
                                                                          { 
                                                                             std::unique_lock<std::mutex> lock(cowns_mutex);
@@ -140,7 +135,7 @@ namespace verona::cpp
 #ifdef USE_SYSTEMATIC_TESTING
                 yield();
 #else
-                std::this_thread::sleep_for(std::chrono::microseconds(10));
+                std::this_thread::sleep_for(std::chrono::microseconds(1));
 #endif
             }
 
@@ -242,8 +237,7 @@ namespace verona::cpp
                     return false;
 
                 std::unique_lock<std::mutex> lock(ref.cowns_mutex);
-                // ref.cowns.push_back(cown);
-                ref.cowns.push_front(cown);
+                ref.cowns.push_back(cown);
             }
 
         // In systematic testing, stop monitoring never gets called because it waits until all threads terminate before
