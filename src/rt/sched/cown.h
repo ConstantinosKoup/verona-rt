@@ -106,6 +106,7 @@ namespace verona::rt
     friend class Noticeboard;
 
     std::atomic<Slot*> last_slot{nullptr};
+    size_t num_accesses{0};
 
     /*
      * Cown's read ref count.

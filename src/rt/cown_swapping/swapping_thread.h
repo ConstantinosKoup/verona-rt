@@ -23,6 +23,7 @@ namespace verona::cpp
     class CownMemoryThread
     {
     private:
+        // std::vector<Cown*> cowns;
         std::deque<Cown*> cowns;
         std::mutex cowns_mutex;
         std::thread monitoring_thread;
@@ -82,13 +83,15 @@ namespace verona::cpp
             std::unique_lock<std::mutex> lock(cowns_mutex);
             while (!cowns.empty())
             {
+                // CownSwapper::unregister_cown(cowns.back());
+                // cowns.pop_back();
                 CownSwapper::unregister_cown(cowns.front());
                 cowns.pop_front();
             }
         }
 
         void monitorMemoryUsage() {
-            size_t count = 0;
+            auto prev_t = std::chrono::system_clock::now();
 
             schedule_lambda([](){ Scheduler::add_external_event_source(); });
 
@@ -101,21 +104,22 @@ namespace verona::cpp
 #ifdef USE_SYSTEMATIC_TESTING
                 Logging::cout() << "Memory Usage: " << memory_usage_MB << " MB" << Logging::endl;
 #else
-                if (count++ % 1000 == 0)
+                if (std::chrono::system_clock::now() > prev_t + std::chrono::seconds(1))
+                {
                     std::cout << "Memory Usage: " << memory_usage_MB << " MB" << std::endl;
+                    prev_t = std::chrono::system_clock::now();
+                }
 #endif
 
                 yield();
-                if (memory_limit_MB == 0)
-                {
-                    unregister_cowns();
-                    cv.notify_all();
-                }
-                else if (memory_usage_MB >= memory_limit_MB * 9 / 10)
+                if (memory_limit_MB > 0 && memory_usage_MB >= memory_limit_MB * 9 / 10)
                 {
                     std::unique_lock<std::mutex> lock(cowns_mutex);
                     if (!cowns.empty())
                     {
+                        // auto min_cown_it = std::min_element(cowns.begin(), cowns.end(), CownSwapper::num_accesses_comparator);
+                        // auto cown = *min_cown_it;
+                        // cowns.erase(min_cown_it);
                         auto cown = cowns.front();
                         cowns.pop_front();
                         if (ActualCownSwapper::schedule_swap(cown, [this](Cown *cown) 
@@ -136,7 +140,7 @@ namespace verona::cpp
 #ifdef USE_SYSTEMATIC_TESTING
                 yield();
 #else
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                std::this_thread::sleep_for(std::chrono::microseconds(10));
 #endif
             }
 
@@ -238,6 +242,7 @@ namespace verona::cpp
                     return false;
 
                 std::unique_lock<std::mutex> lock(ref.cowns_mutex);
+                // ref.cowns.push_back(cown);
                 ref.cowns.push_front(cown);
             }
 

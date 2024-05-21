@@ -13,13 +13,13 @@ using namespace verona::cpp;
 
 constexpr size_t COWN_NUMBER = 10000;
 constexpr size_t COWN_DATA_SIZE = 1000000;
-constexpr size_t COWNS_PER_BEHAVIOUR = 3;
-constexpr size_t BEHAVIOUR_RUNTIME_MS = 1;
+constexpr size_t COWNS_PER_BEHAVIOUR = 2;
+constexpr size_t BEHAVIOUR_RUNTIME_MS = 5;
 constexpr size_t MEMORY_LIMIT_MB = 5000;
-constexpr double STANDARD_DEVIATION = COWN_NUMBER / 10.0;
-constexpr size_t THREAD_NUMBER = 10;
-constexpr size_t TOTAL_BEHAVIOURS = 1000;
-constexpr size_t INTER_ARRIVAL_MS = 10;
+constexpr double STANDARD_DEVIATION = COWN_NUMBER / 4.0;
+constexpr size_t THREAD_NUMBER = 16;
+constexpr size_t TOTAL_BEHAVIOURS = 100000;
+constexpr size_t INTER_ARRIVAL_MICROSECS = 500;
 
 class Body
 {
@@ -116,13 +116,14 @@ void behaviour_spawning_thread(cown_ptr<Body*> *bodies,
     when(ca) << [&](...)
     {
       std::this_thread::sleep_for(std::chrono::milliseconds(BEHAVIOUR_RUNTIME_MS));
+
       auto end = std::chrono::high_resolution_clock::now();
 
       latency.fetch_add(std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
       global_end.store(end, std::memory_order_acq_rel);
     };
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(INTER_ARRIVAL_MS));
+    std::this_thread::sleep_for(std::chrono::microseconds(INTER_ARRIVAL_MICROSECS));
   }
 
   when() << []()
@@ -160,11 +161,12 @@ int main()
   long double throughput = (long double) TOTAL_BEHAVIOURS / total_runtime;
   long double average_latency_s = (long double) latency.load() / TOTAL_BEHAVIOURS / std::pow(10, 6);
 
+  std::cout << "Benchmark runtime: " << std::fixed << std::setprecision(3)
+            << total_runtime << " seconds" << std::endl;
   std::cout << "Average latency: " << std::fixed << std::setprecision(3)
               << average_latency_s  << " milliseconds" << std::endl;
   std::cout << "Throughput: " << std::fixed << std::setprecision(3)
               << throughput << " behaviours per second" << std::endl;
-
   delete[] bodies;
 
   return 0;
