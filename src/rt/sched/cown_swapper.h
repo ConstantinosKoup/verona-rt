@@ -96,8 +96,14 @@ namespace verona::rt
             return false;
         }
 
+        static bool num_accesses_comparator(Cown *a, Cown *b)
+        {
+            return a->num_accesses <= b->num_accesses;
+        }
+
         static bool set_in_memory(Cown *cown)
         {
+            ++cown->num_accesses;
             if (cown->swapped)
             {
                 cown->swapped = false;
