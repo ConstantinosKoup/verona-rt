@@ -11,7 +11,7 @@
 using namespace verona::rt;
 using namespace verona::cpp;
 
-const std::string BENCHMARK_NAME = "least-accessed";
+const std::string BENCHMARK_NAME = "least-frequently-accessed";
 constexpr size_t COWN_NUMBER = 10000;
 constexpr size_t COWN_DATA_SIZE = 1000000;
 constexpr size_t COWNS_PER_BEHAVIOUR = 2;
