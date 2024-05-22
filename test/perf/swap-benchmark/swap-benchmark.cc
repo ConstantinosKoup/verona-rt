@@ -17,6 +17,7 @@ constexpr size_t COWNS_PER_BEHAVIOUR = 2;
 constexpr size_t BEHAVIOUR_RUNTIME_MS = 5;
 constexpr size_t MEMORY_LIMIT_MB = 5000;
 constexpr double STANDARD_DEVIATION = COWN_NUMBER / 4.0;
+constexpr size_t MONITOR_SLEEP_MICROSECS = 2500;
 constexpr size_t THREAD_NUMBER = 16;
 constexpr size_t TOTAL_BEHAVIOURS = 100000;
 constexpr size_t INTER_ARRIVAL_MICROSECS = 500;
@@ -89,8 +90,6 @@ void behaviour_spawning_thread(cown_ptr<Body*> *bodies,
                                 std::chrono::time_point<std::chrono::high_resolution_clock>& global_start,
                                 std::atomic<std::chrono::time_point<std::chrono::high_resolution_clock>>& global_end)
 {
-  std::random_device rd;
-  std::mt19937 gen(rd());
   std::mutex m;
 
   when() << []()
@@ -145,7 +144,7 @@ int main()
   Scheduler& sched = Scheduler::get();
   sched.init(THREAD_NUMBER);
 
-  CownMemoryThread::create(MEMORY_LIMIT_MB);
+  CownMemoryThread::create(MEMORY_LIMIT_MB, MONITOR_SLEEP_MICROSECS);
   init_bodies(bodies);
 
   std::thread bs(behaviour_spawning_thread, bodies, std::ref(latency), std::ref(global_start), std::ref(global_end));

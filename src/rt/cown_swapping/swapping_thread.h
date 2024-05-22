@@ -28,6 +28,7 @@ namespace verona::cpp
         std::mutex cowns_mutex;
         std::thread monitoring_thread;
         size_t memory_limit_MB;
+        size_t sleep_time;
         std::atomic_bool keep_monitoring;
         std::atomic_bool running{false};
         bool debug{false};
@@ -140,7 +141,7 @@ namespace verona::cpp
 #ifdef USE_SYSTEMATIC_TESTING
                 yield();
 #else
-                std::this_thread::sleep_for(std::chrono::microseconds(10));
+                std::this_thread::sleep_for(std::chrono::milliseconds(sleep_time));
 #endif
             }
 
@@ -150,11 +151,12 @@ namespace verona::cpp
             schedule_lambda([](){ Scheduler::remove_external_event_source(); });
         }
         
-        void reset(size_t memory_limit_MB, bool debug = false)
+        void reset(size_t memory_limit_MB, size_t sleep_time, bool debug = false)
         {
 
             this->keep_monitoring = true;
             this->memory_limit_MB = memory_limit_MB;
+            this->sleep_time = sleep_time;
             this->running = true;
             this->debug = debug;
 
@@ -180,7 +182,7 @@ namespace verona::cpp
         }
 
     public:
-        static void create(size_t memory_limit_MB = 0)
+        static void create(size_t memory_limit_MB = 0, size_t sleep_time = 2500)
         {
             auto& ref = get_ref();
             if (ref.running.load(std::memory_order_relaxed))
@@ -188,7 +190,7 @@ namespace verona::cpp
                 Logging::cout() << "Error, cannot create new monitoring thread while old one is running" << Logging::endl;
                 abort();
             }
-            ref.reset(memory_limit_MB);
+            ref.reset(memory_limit_MB, sleep_time);
         }
 
         static void wait(std::unique_lock<std::mutex> lock)
@@ -196,7 +198,7 @@ namespace verona::cpp
             get_ref().cv.wait(lock);
         }
 
-        static auto create_debug(size_t memory_limit_MB = 0)
+        static auto create_debug(size_t memory_limit_MB = 0, size_t sleep_time = 2500)
         {
             auto& ref = get_ref();
             if (ref.running.load(std::memory_order_relaxed))
@@ -205,7 +207,7 @@ namespace verona::cpp
                 abort();
             }
 
-            ref.reset(memory_limit_MB, true);
+            ref.reset(memory_limit_MB, sleep_time, true);
             return [&ref](){ ref.monitorMemoryUsage(); };
         }
 
