@@ -114,9 +114,9 @@ namespace verona::cpp
                     std::unique_lock<std::mutex> lock(cowns_mutex);
                     if (!cowns.empty())
                     {
-                        auto min_cown_it = std::min_element(cowns.begin(), cowns.end(), CownSwapper::num_accesses_comparator);
-                        auto cown = *min_cown_it;
-                        cowns.erase(min_cown_it);
+                        auto cown_it = cowns.begin() + (std::rand() % cowns.size());
+                        auto cown = *cown_it;
+                        cowns.erase(cown_it);
                         if (ActualCownSwapper::schedule_swap(cown, [this](Cown *cown) 
                                                                          { 
                                                                             std::unique_lock<std::mutex> lock(cowns_mutex);

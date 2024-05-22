@@ -11,7 +11,7 @@
 using namespace verona::rt;
 using namespace verona::cpp;
 
-const std::string BENCHMARK_NAME = "LFU";
+const std::string BENCHMARK_NAME = "random";
 constexpr size_t COWN_NUMBER = 10000;
 constexpr size_t COWN_DATA_SIZE = 1000000;
 constexpr size_t COWNS_PER_BEHAVIOUR = 2;
