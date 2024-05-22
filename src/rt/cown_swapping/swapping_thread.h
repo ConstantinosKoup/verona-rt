@@ -135,7 +135,7 @@ namespace verona::cpp
 #ifdef USE_SYSTEMATIC_TESTING
                 yield();
 #else
-                std::this_thread::sleep_for(std::chrono::microseconds(1));
+                std::this_thread::sleep_for(std::chrono::microseconds(1000));
 #endif
             }
 

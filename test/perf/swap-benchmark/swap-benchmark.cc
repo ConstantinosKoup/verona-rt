@@ -19,7 +19,7 @@ constexpr size_t BEHAVIOUR_RUNTIME_MS = 5;
 constexpr size_t MEMORY_LIMIT_MB = 5000;
 constexpr double STANDARD_DEVIATION = COWN_NUMBER / 15.0;
 constexpr size_t THREAD_NUMBER = 16;
-constexpr size_t TOTAL_BEHAVIOURS = 1000000;
+constexpr size_t TOTAL_BEHAVIOURS = 100000;
 constexpr size_t INTER_ARRIVAL_MICROSECS = 500;
 constexpr bool WRITE_TO_FILE = true;
 
