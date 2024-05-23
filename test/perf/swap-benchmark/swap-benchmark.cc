@@ -122,17 +122,15 @@ void behaviour_spawning_thread(cown_ptr<Body*> *bodies,
 
   for (size_t i = 0; i < TOTAL_BEHAVIOURS; ++i)
   {
-    auto spawn_time = std::chrono::high_resolution_clock::now();
-      
     cown_ptr<Body *> carray[COWNS_PER_BEHAVIOUR];
     for (size_t j = 0; j < COWNS_PER_BEHAVIOUR; ++j)
       carray[j] = bodies[get_normal_index()];
 
     cown_array<Body *> ca{carray, COWNS_PER_BEHAVIOUR};
 
-    when(ca) << [&](...)
+    auto spawn_time = std::chrono::high_resolution_clock::now();
+    when(ca) << [spawn_time, &latency, &global_end](...)
     {
-
       std::this_thread::sleep_for(std::chrono::milliseconds(BEHAVIOUR_RUNTIME_MS));
 
       auto end = std::chrono::high_resolution_clock::now();
@@ -159,7 +157,7 @@ void test_body(std::atomic_int64_t& latency,
   Scheduler& sched = Scheduler::get();
   sched.init(THREAD_NUMBER);
 
-  CownMemoryThread::create(MEMORY_LIMIT_MB, MONITOR_SLEEP_MICROSECS);
+  CownMemoryThread::create(MEMORY_LIMIT_MB, MONITOR_SLEEP_MICROSECS, CownMemoryThread::SwappingAlgo::RANDOM);
   init_bodies(bodies);
 
   std::thread bs(behaviour_spawning_thread, bodies, std::ref(latency), std::ref(global_start), std::ref(global_end));
@@ -171,7 +169,7 @@ void test_body(std::atomic_int64_t& latency,
 
 void print_results(long double total_runtime, long double average_latency_s, long double throughput)
 {
-    struct group_thousands : std::numpunct<char> 
+    struct group_thousands : std::numpunct<char>
   { std::string do_grouping() const override { return "\3"; } };
   std::cout.imbue(std::locale(std::cout.getloc(), new group_thousands));
 

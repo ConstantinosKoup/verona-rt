@@ -22,15 +22,27 @@ namespace verona::cpp
 
     class CownMemoryThread
     {
+    public:
+        enum class SwappingAlgo
+        {
+            LRU,
+            LFU,
+            RANDOM,
+            ROUND_ROBIN,
+            SECOND_CHANCE
+        };
+
     private:
+        const size_t memory_limit_MB;
+        const size_t sleep_time;
+        const bool debug;
+        const SwappingAlgo swapping_algo;
+
         std::vector<Cown*> cowns;
         std::mutex cowns_mutex;
         std::thread monitoring_thread;
-        size_t memory_limit_MB;
-        size_t sleep_time;
         std::atomic_bool keep_monitoring;
         std::atomic_bool running{false};
-        bool debug{false};
         std::condition_variable cv;
 
 #ifdef USE_SYSTEMATIC_TESTING
@@ -39,7 +51,21 @@ namespace verona::cpp
 #endif
 
     private:
-        CownMemoryThread() = default;
+        CownMemoryThread(size_t memory_limit_MB, size_t sleep_time, SwappingAlgo swapping_algo, bool debug) 
+        : memory_limit_MB(memory_limit_MB), sleep_time(sleep_time), debug(debug), swapping_algo(swapping_algo)
+        {
+            this->keep_monitoring = true;
+
+#ifdef USE_SYSTEMATIC_TESTING
+            this->registered = false;
+            this->nothing_loop_count = 0;
+#endif
+
+            if (! debug)
+                monitoring_thread = std::thread(&CownMemoryThread::monitorMemoryUsage, this);
+
+            Logging::cout() << "Monitoring thread created" << Logging::endl;
+        }
 
 #ifdef _WIN32
         // Function to get memory usage for Windows
@@ -145,47 +171,27 @@ namespace verona::cpp
 
             schedule_lambda([](){ Scheduler::remove_external_event_source(); });
         }
-        
-        void reset(size_t memory_limit_MB, size_t sleep_time, bool debug = false)
-        {
-
-            this->keep_monitoring = true;
-            this->memory_limit_MB = memory_limit_MB;
-            this->sleep_time = sleep_time;
-            this->running = true;
-            this->debug = debug;
-
-#ifdef USE_SYSTEMATIC_TESTING
-            this->registered = false;
-            this->nothing_loop_count = 0;
-#endif
-
-            if (! debug)
-                monitoring_thread = std::thread(&CownMemoryThread::monitorMemoryUsage, this);
-
-            Logging::cout() << "Monitoring thread created" << Logging::endl;
-        }
 
         // Delete copy constructor and assignment operator to prevent duplication
         CownMemoryThread(const CownMemoryThread&) = delete;
         void operator=(const CownMemoryThread&) = delete;
         
-        static CownMemoryThread& get_ref()
+        static CownMemoryThread& get_ref(size_t memory_limit_MB = 0, size_t sleep_time = 0,
+                                            SwappingAlgo swapping_algo = SwappingAlgo::LRU, bool debug = false)
         {
-            static CownMemoryThread ref = CownMemoryThread();            
+            static CownMemoryThread ref = CownMemoryThread(memory_limit_MB, sleep_time, swapping_algo, debug);            
             return ref;
         }
 
     public:
-        static void create(size_t memory_limit_MB = 0, size_t sleep_time = 2500)
+        static void create(size_t memory_limit_MB, size_t sleep_time, SwappingAlgo swapping_algo)
         {
-            auto& ref = get_ref();
-            if (ref.running.load(std::memory_order_relaxed))
+            auto& ref = get_ref(memory_limit_MB, sleep_time, swapping_algo);
+            if (ref.running.exchange(true, std::memory_order_relaxed))
             {
                 Logging::cout() << "Error, cannot create new monitoring thread while old one is running" << Logging::endl;
                 abort();
             }
-            ref.reset(memory_limit_MB, sleep_time);
         }
 
         static void wait(std::unique_lock<std::mutex> lock)
@@ -193,16 +199,15 @@ namespace verona::cpp
             get_ref().cv.wait(lock);
         }
 
-        static auto create_debug(size_t memory_limit_MB = 0, size_t sleep_time = 2500)
+        static auto create_debug(size_t memory_limit_MB, size_t sleep_time, SwappingAlgo swapping_algo)
         {
-            auto& ref = get_ref();
-            if (ref.running.load(std::memory_order_relaxed))
+            auto& ref = get_ref(memory_limit_MB, sleep_time, swapping_algo, /*debug =*/ true);
+            if (ref.running.exchange(true, std::memory_order_relaxed))
             {
                 Logging::cout() << "Error, cannot create new monitoring thread while old one is running" << Logging::endl;
                 abort();
             }
 
-            ref.reset(memory_limit_MB, sleep_time, true);
             return [&ref](){ ref.monitorMemoryUsage(); };
         }
 
