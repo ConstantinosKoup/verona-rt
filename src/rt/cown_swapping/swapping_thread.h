@@ -184,6 +184,19 @@ namespace verona::cpp
         }
 
     public:
+        static const std::string algo_to_string(SwappingAlgo algo)
+        {
+            std::unordered_map<SwappingAlgo, std::string> table =
+            {
+                {SwappingAlgo::LRU, "LRU"},
+                {SwappingAlgo::LFU, "LFU"},
+                {SwappingAlgo::RANDOM, "Random"},
+                {SwappingAlgo::ROUND_ROBIN, "Round Robin"},
+                {SwappingAlgo::SECOND_CHANCE, "Second Chance"},
+            };
+
+            return table[algo];
+        }
         static void create(size_t memory_limit_MB, size_t sleep_time, SwappingAlgo swapping_algo)
         {
             auto& ref = get_ref(memory_limit_MB, sleep_time, swapping_algo);

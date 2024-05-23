@@ -12,7 +12,8 @@
 using namespace verona::rt;
 using namespace verona::cpp;
 
-const std::string BENCHMARK_NAME = "random";
+CownMemoryThread::SwappingAlgo SWAP_ALGO{CownMemoryThread::SwappingAlgo::LRU};
+bool uninstrumented{false};
 size_t COWN_NUMBER;
 size_t COWN_DATA_SIZE;
 size_t COWNS_PER_BEHAVIOUR;
@@ -25,9 +26,49 @@ size_t TOTAL_BEHAVIOURS;
 size_t INTER_ARRIVAL_MICROSECS;
 constexpr bool WRITE_TO_FILE = true;
 
+void read_swap_algo(opt::Opt& opt)
+{
+  size_t swap_count = 0;
+  if (opt.has("--LFU"))
+  {
+    SWAP_ALGO = CownMemoryThread::SwappingAlgo::LFU;
+    ++swap_count;
+  }
+  if (opt.has("--LRU"))
+  {
+    SWAP_ALGO = CownMemoryThread::SwappingAlgo::LRU;
+    ++swap_count;
+  }
+  if (opt.has("--Random"))
+  {
+    SWAP_ALGO = CownMemoryThread::SwappingAlgo::RANDOM;
+    ++swap_count;
+  }
+  if (opt.has("--RoundRobin"))
+  {
+    SWAP_ALGO = CownMemoryThread::SwappingAlgo::ROUND_ROBIN;
+    ++swap_count;
+  }
+  if (opt.has("--SecondChance"))
+  {
+    SWAP_ALGO = CownMemoryThread::SwappingAlgo::SECOND_CHANCE;
+    ++swap_count;
+  }
+  if (opt.has("--Uninstrumented"))
+  {
+    uninstrumented = true;
+    ++swap_count;
+  }
+
+  if (swap_count > 1)
+    error("More than one swapping algorithm selected");
+}
+
 void read_input(int argc, char *argv[])
 {
   opt::Opt opt(argc, argv);
+
+  read_swap_algo(opt);
   COWN_NUMBER = opt.is<size_t>("--COWN_NUMBER", 10000);
   COWN_DATA_SIZE = opt.is<size_t>("--COWN_DATA_SIZE", 1000000);
   COWNS_PER_BEHAVIOUR = opt.is<size_t>("--COWNS_PER_BEHAVIOUR", 2);
@@ -87,7 +128,8 @@ void init_bodies(cown_ptr<Body*> *bodies)
   for (size_t i = 0; i < COWN_NUMBER; ++i)
     bodies[i] = make_cown<Body*>(new Body(i, COWN_DATA_SIZE));
 
-  CownMemoryThread::register_cowns(COWN_NUMBER, bodies);
+  if (!uninstrumented)
+    CownMemoryThread::register_cowns(COWN_NUMBER, bodies);
 }
 
 size_t get_normal_index() {
@@ -115,7 +157,8 @@ void behaviour_spawning_thread(cown_ptr<Body*> *bodies,
     Scheduler::add_external_event_source();
   };
 
-  CownMemoryThread::wait(std::unique_lock(m));
+  if (!uninstrumented)
+    CownMemoryThread::wait(std::unique_lock(m));
 
   std::cout << "Memory limit reached. Benchmark starting" << std::endl;
   global_start = std::chrono::high_resolution_clock::now();
@@ -144,7 +187,8 @@ void behaviour_spawning_thread(cown_ptr<Body*> *bodies,
   when() << []()
   {
     Scheduler::remove_external_event_source();
-    CownMemoryThread::stop_monitoring();
+    if (!uninstrumented)
+      CownMemoryThread::stop_monitoring();
   };
 }
 
@@ -157,7 +201,9 @@ void test_body(std::atomic_int64_t& latency,
   Scheduler& sched = Scheduler::get();
   sched.init(THREAD_NUMBER);
 
-  CownMemoryThread::create(MEMORY_LIMIT_MB, MONITOR_SLEEP_MICROSECS, CownMemoryThread::SwappingAlgo::RANDOM);
+  if (!uninstrumented)
+    CownMemoryThread::create(MEMORY_LIMIT_MB, MONITOR_SLEEP_MICROSECS, SWAP_ALGO);
+
   init_bodies(bodies);
 
   std::thread bs(behaviour_spawning_thread, bodies, std::ref(latency), std::ref(global_start), std::ref(global_end));
@@ -189,7 +235,7 @@ void write_to_file(long double total_runtime, long double average_latency_s, lon
     {
       std::ofstream csv("results.csv");
       std::stringstream csv_out;
-      csv_out << "BENCHMARK_NAME" << ','
+      csv_out << "SWAP_ALGO" << ','
               << "COWN_NUMBER" << ','
               << "COWN_DATA_SIZE" << ','
               << "COWNS_PER_BEHAVIOUR" << ','
@@ -209,7 +255,7 @@ void write_to_file(long double total_runtime, long double average_latency_s, lon
 
     std::ofstream csv("results.csv", std::ios::app);
     std::stringstream csv_out;
-    csv_out << BENCHMARK_NAME << ','
+    csv_out << (uninstrumented ? "Uninstrumented" : CownMemoryThread::algo_to_string(SWAP_ALGO)) << ','
             << COWN_NUMBER << ','
             << COWN_DATA_SIZE << ','
             << COWNS_PER_BEHAVIOUR << ','
