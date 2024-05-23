@@ -38,6 +38,10 @@ namespace verona::cpp
         const bool debug;
         const SwappingAlgo swapping_algo;
 
+        std::atomic_bool keep_average{false};
+        uint64_t sum{0};
+        size_t measure_count{0};
+
         std::vector<Cown*> cowns;
         size_t next_cown;
         std::mutex cowns_mutex;
@@ -118,7 +122,7 @@ namespace verona::cpp
             }
         }
 #elif __linux__
-        int parseLine(char* line){
+        static int parseLine(char* line){
             // This assumes that a digit will be found and the line ends in " Kb".
             int i = strlen(line);
             const char* p = line;
@@ -128,7 +132,7 @@ namespace verona::cpp
             return i;
         }
 
-        int getMemoryUsage(){ //Note: this value is in KB!
+        static int getMemoryUsage(){ //Note: this value is in KB!
             FILE* file = fopen("/proc/self/status", "r");
             int result = -1;
             char line[128];
@@ -172,6 +176,11 @@ namespace verona::cpp
                 {
                     std::cout << "Memory Usage: " << memory_usage_MB << " MB" << std::endl;
                     prev_t = std::chrono::system_clock::now();
+                    if (keep_average)
+                    {
+                        sum += memory_usage_MB;
+                        ++measure_count;
+                    }
                 }
 #endif
 
@@ -222,6 +231,16 @@ namespace verona::cpp
         }
 
     public:
+        static void start_keep_average()
+        {
+            get_ref().keep_average = true;
+        }
+
+        static uint64_t get_memory_usage_MB()
+        {
+            return getMemoryUsage() / 1024;
+        }
+
         static const std::string algo_to_string(SwappingAlgo algo)
         {
             std::unordered_map<SwappingAlgo, std::string> table =
@@ -235,6 +254,7 @@ namespace verona::cpp
 
             return table[algo];
         }
+
         static void create(size_t memory_limit_MB, size_t sleep_time, SwappingAlgo swapping_algo)
         {
             auto& ref = get_ref(memory_limit_MB, sleep_time, swapping_algo);
@@ -262,13 +282,13 @@ namespace verona::cpp
             return [&ref](){ ref.monitorMemoryUsage(); };
         }
 
-        static void stop_monitoring()
+        static uint64_t stop_monitoring()
         {
             auto& ref = get_ref();
             if (!ref.running.load(std::memory_order_relaxed))
             {
                 Logging::cout() << "Memory thread is not running" << Logging::endl;
-                return;
+                return 0;
             }
 
             ref.running.store(false, std::memory_order_acq_rel);
@@ -276,6 +296,8 @@ namespace verona::cpp
 
             if (!ref.debug)
                 ref.monitoring_thread.join();
+
+            return ref.measure_count == 0 ? 0 : ref.sum / ref.measure_count;
         }
 
         template<typename T>

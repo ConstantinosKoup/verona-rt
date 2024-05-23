@@ -147,6 +147,7 @@ size_t get_normal_index() {
 
 void behaviour_spawning_thread(cown_ptr<Body*> *bodies,
                                 std::atomic_int64_t& latency,
+                                uint64_t& memory_usage_average,
                                 std::chrono::time_point<std::chrono::high_resolution_clock>& global_start,
                                 std::atomic<std::chrono::time_point<std::chrono::high_resolution_clock>>& global_end)
 {
@@ -161,6 +162,11 @@ void behaviour_spawning_thread(cown_ptr<Body*> *bodies,
     CownMemoryThread::wait(std::unique_lock(m));
 
   std::cout << "Memory limit reached. Benchmark starting" << std::endl;
+  if (uninstrumented)
+    memory_usage_average = CownMemoryThread::get_memory_usage_MB();
+  else
+    CownMemoryThread::start_keep_average();
+  
   global_start = std::chrono::high_resolution_clock::now();
 
   for (size_t i = 0; i < TOTAL_BEHAVIOURS; ++i)
@@ -184,15 +190,16 @@ void behaviour_spawning_thread(cown_ptr<Body*> *bodies,
     std::this_thread::sleep_for(std::chrono::microseconds(INTER_ARRIVAL_MICROSECS));
   }
 
-  when() << []()
+  when() << [&memory_usage_average]()
   {
     Scheduler::remove_external_event_source();
     if (!uninstrumented)
-      CownMemoryThread::stop_monitoring();
+      memory_usage_average = CownMemoryThread::stop_monitoring();
   };
 }
 
 void test_body(std::atomic_int64_t& latency,
+                uint64_t& memory_usage_average,
                 std::chrono::time_point<std::chrono::high_resolution_clock>& global_start,
                 std::atomic<std::chrono::time_point<std::chrono::high_resolution_clock>>& global_end)
 {
@@ -206,14 +213,14 @@ void test_body(std::atomic_int64_t& latency,
 
   init_bodies(bodies);
 
-  std::thread bs(behaviour_spawning_thread, bodies, std::ref(latency), std::ref(global_start), std::ref(global_end));
+  std::thread bs(behaviour_spawning_thread, bodies, std::ref(latency), std::ref(memory_usage_average), std::ref(global_start), std::ref(global_end));
   sched.run();
   bs.join();
 
   delete[] bodies;
 }
 
-void print_results(long double total_runtime, long double average_latency_s, long double throughput)
+void print_results(long double total_runtime, uint64_t memory_usage_average, long double average_latency_s, long double throughput)
 {
     struct group_thousands : std::numpunct<char>
   { std::string do_grouping() const override { return "\3"; } };
@@ -221,13 +228,14 @@ void print_results(long double total_runtime, long double average_latency_s, lon
 
   std::cout << "Benchmark runtime: " << std::fixed << std::setprecision(3)
             << total_runtime << " seconds" << std::endl;
+  std::cout << "Average memory usage: " << memory_usage_average  << " MB" << std::endl;
   std::cout << "Average latency: " << std::fixed << std::setprecision(3)
               << average_latency_s  << " microseconds" << std::endl;
   std::cout << "Throughput: " << std::fixed << std::setprecision(3)
               << throughput << " behaviours per second" << std::endl;
 }
 
-void write_to_file(long double total_runtime, long double average_latency_s, long double throughput)
+void write_to_file(long double total_runtime, uint64_t memory_usage_average, long double average_latency_s, long double throughput)
 {
   if constexpr (WRITE_TO_FILE)
   {
@@ -247,6 +255,7 @@ void write_to_file(long double total_runtime, long double average_latency_s, lon
               << "TOTAL_BEHAVIOURS" << ','
               << "INTER_ARRIVAL_MICROSECS" << ','
               << "TOTAL_RUNTIME" << ','
+              << "AVERAGE_MEMORY_USAGE_MB" << ','
               << "AVERAGE_LATENCY_S" << ','
               << "THROUGHPUT" << ',' << std::endl;
 
@@ -268,6 +277,7 @@ void write_to_file(long double total_runtime, long double average_latency_s, lon
             << TOTAL_BEHAVIOURS << ','
             << INTER_ARRIVAL_MICROSECS << ','
             << total_runtime << ','
+            << memory_usage_average << ','
             << average_latency_s << ','
             << throughput << ',' << std::endl;
 
@@ -282,10 +292,11 @@ int main(int argc, char *argv[])
   std::atomic_int64_t latency{0};
   std::chrono::time_point<std::chrono::high_resolution_clock> global_start;
   std::atomic<std::chrono::time_point<std::chrono::high_resolution_clock>> global_end;
+  uint64_t memory_usage_average;
 
   read_input(argc, argv);
 
-  test_body(latency, global_start, global_end);
+  test_body(latency, memory_usage_average, global_start, global_end);
 
 
   long double total_runtime = 
@@ -293,9 +304,9 @@ int main(int argc, char *argv[])
   long double throughput = (long double) TOTAL_BEHAVIOURS / total_runtime;
   long double average_latency_s = (long double) latency.load() / TOTAL_BEHAVIOURS;
 
-  print_results(total_runtime, average_latency_s, throughput);
+  print_results(total_runtime, memory_usage_average, average_latency_s, throughput);
 
-  write_to_file(total_runtime, average_latency_s, throughput);
+  write_to_file(total_runtime, memory_usage_average, average_latency_s, throughput);
 
   return 0;
 }
