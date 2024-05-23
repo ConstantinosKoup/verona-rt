@@ -84,7 +84,7 @@ class Store
 
 void test_body(SystematicTestHarness *harness)
 {
-  harness->external_thread(CownMemoryThread::create_debug(500));
+  harness->external_thread(CownMemoryThread::create_debug(500, 0,CownMemoryThread::SwappingAlgo::LRU));
   size_t seed = harness->current_seed();
   Logging::cout() << "test_body()" << Logging::endl;
 

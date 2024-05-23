@@ -5,22 +5,81 @@
 #include <stack>
 #include <vector>
 #include <random>
+#include <test/opt.h>
 
 #include "cown_swapping/swapping_thread.h"
 
 using namespace verona::rt;
 using namespace verona::cpp;
 
-constexpr size_t COWN_NUMBER = 10000;
-constexpr size_t COWN_DATA_SIZE = 1000000;
-constexpr size_t COWNS_PER_BEHAVIOUR = 2;
-constexpr size_t BEHAVIOUR_RUNTIME_MS = 5;
-constexpr size_t MEMORY_LIMIT_MB = 5000;
-constexpr double STANDARD_DEVIATION = COWN_NUMBER / 4.0;
-constexpr size_t MONITOR_SLEEP_MICROSECS = 2500;
-constexpr size_t THREAD_NUMBER = 16;
-constexpr size_t TOTAL_BEHAVIOURS = 100000;
-constexpr size_t INTER_ARRIVAL_MICROSECS = 500;
+CownMemoryThread::SwappingAlgo SWAP_ALGO{CownMemoryThread::SwappingAlgo::LRU};
+bool uninstrumented{false};
+size_t COWN_NUMBER;
+size_t COWN_DATA_SIZE;
+size_t COWNS_PER_BEHAVIOUR;
+size_t BEHAVIOUR_RUNTIME_MS;
+size_t MEMORY_LIMIT_MB;
+long double STANDARD_DEVIATION;
+size_t MONITOR_SLEEP_MICROSECS;
+size_t THREAD_NUMBER;
+size_t TOTAL_BEHAVIOURS;
+size_t INTER_ARRIVAL_MICROSECS;
+constexpr bool WRITE_TO_FILE = true;
+
+void read_swap_algo(opt::Opt& opt)
+{
+  size_t swap_count = 0;
+  if (opt.has("--LFU"))
+  {
+    SWAP_ALGO = CownMemoryThread::SwappingAlgo::LFU;
+    ++swap_count;
+  }
+  if (opt.has("--LRU"))
+  {
+    SWAP_ALGO = CownMemoryThread::SwappingAlgo::LRU;
+    ++swap_count;
+  }
+  if (opt.has("--Random"))
+  {
+    SWAP_ALGO = CownMemoryThread::SwappingAlgo::RANDOM;
+    ++swap_count;
+  }
+  if (opt.has("--RoundRobin"))
+  {
+    SWAP_ALGO = CownMemoryThread::SwappingAlgo::ROUND_ROBIN;
+    ++swap_count;
+  }
+  if (opt.has("--SecondChance"))
+  {
+    SWAP_ALGO = CownMemoryThread::SwappingAlgo::SECOND_CHANCE;
+    ++swap_count;
+  }
+  if (opt.has("--Uninstrumented"))
+  {
+    uninstrumented = true;
+    ++swap_count;
+  }
+
+  if (swap_count > 1)
+    error("More than one swapping algorithm selected");
+}
+
+void read_input(int argc, char *argv[])
+{
+  opt::Opt opt(argc, argv);
+
+  read_swap_algo(opt);
+  COWN_NUMBER = opt.is<size_t>("--COWN_NUMBER", 10000);
+  COWN_DATA_SIZE = opt.is<size_t>("--COWN_DATA_SIZE", 1000000);
+  COWNS_PER_BEHAVIOUR = opt.is<size_t>("--COWNS_PER_BEHAVIOUR", 2);
+  BEHAVIOUR_RUNTIME_MS = opt.is<size_t>("--BEHAVIOUR_RUNTIME_MS", 5);
+  MEMORY_LIMIT_MB = opt.is<size_t>("--MEMORY_LIMIT_MB", 5000);
+  STANDARD_DEVIATION = opt.is<double>("--STANDARD_DEVIATION", (long double) COWN_NUMBER / 6.0);
+  MONITOR_SLEEP_MICROSECS = opt.is<size_t>("--MONITOR_SLEEP_MICROSECS", 0);
+  THREAD_NUMBER = opt.is<size_t>("--THREAD_NUMBER", 16);
+  TOTAL_BEHAVIOURS = opt.is<size_t>("--TOTAL_BEHAVIOURS", 100000);
+  INTER_ARRIVAL_MICROSECS = opt.is<size_t>("--INTER_ARRIVAL_MICROSECS", 500);
+}
 
 class Body
 {
@@ -69,7 +128,8 @@ void init_bodies(cown_ptr<Body*> *bodies)
   for (size_t i = 0; i < COWN_NUMBER; ++i)
     bodies[i] = make_cown<Body*>(new Body(i, COWN_DATA_SIZE));
 
-  CownMemoryThread::register_cowns(COWN_NUMBER, bodies);
+  if (!uninstrumented)
+    CownMemoryThread::register_cowns(COWN_NUMBER, bodies);
 }
 
 size_t get_normal_index() {
@@ -87,6 +147,7 @@ size_t get_normal_index() {
 
 void behaviour_spawning_thread(cown_ptr<Body*> *bodies,
                                 std::atomic_int64_t& latency,
+                                uint64_t& memory_usage_average,
                                 std::chrono::time_point<std::chrono::high_resolution_clock>& global_start,
                                 std::atomic<std::chrono::time_point<std::chrono::high_resolution_clock>>& global_end)
 {
@@ -97,76 +158,155 @@ void behaviour_spawning_thread(cown_ptr<Body*> *bodies,
     Scheduler::add_external_event_source();
   };
 
-  CownMemoryThread::wait(std::unique_lock(m));
+  if (!uninstrumented)
+    CownMemoryThread::wait(std::unique_lock(m));
 
   std::cout << "Memory limit reached. Benchmark starting" << std::endl;
+  if (uninstrumented)
+    memory_usage_average = CownMemoryThread::get_memory_usage_MB();
+  else
+    CownMemoryThread::start_keep_average();
+  
   global_start = std::chrono::high_resolution_clock::now();
 
   for (size_t i = 0; i < TOTAL_BEHAVIOURS; ++i)
   {
-    auto start = std::chrono::high_resolution_clock::now();
-      
     cown_ptr<Body *> carray[COWNS_PER_BEHAVIOUR];
     for (size_t j = 0; j < COWNS_PER_BEHAVIOUR; ++j)
       carray[j] = bodies[get_normal_index()];
 
     cown_array<Body *> ca{carray, COWNS_PER_BEHAVIOUR};
 
-    when(ca) << [&](...)
+    auto spawn_time = std::chrono::high_resolution_clock::now();
+    when(ca) << [spawn_time, &latency, &global_end](...)
     {
       std::this_thread::sleep_for(std::chrono::milliseconds(BEHAVIOUR_RUNTIME_MS));
 
       auto end = std::chrono::high_resolution_clock::now();
-
-      latency.fetch_add(std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
+      latency.fetch_add(std::chrono::duration_cast<std::chrono::microseconds>(end - spawn_time).count());
       global_end.store(end, std::memory_order_acq_rel);
     };
 
     std::this_thread::sleep_for(std::chrono::microseconds(INTER_ARRIVAL_MICROSECS));
   }
 
-  when() << []()
+  when() << [&memory_usage_average]()
   {
     Scheduler::remove_external_event_source();
-    CownMemoryThread::stop_monitoring();
+    if (!uninstrumented)
+      memory_usage_average = CownMemoryThread::stop_monitoring();
   };
 }
 
-int main()
+void test_body(std::atomic_int64_t& latency,
+                uint64_t& memory_usage_average,
+                std::chrono::time_point<std::chrono::high_resolution_clock>& global_start,
+                std::atomic<std::chrono::time_point<std::chrono::high_resolution_clock>>& global_end)
 {
-  std::srand(32);
-  std::atomic_int64_t latency{0};
-  std::chrono::time_point<std::chrono::high_resolution_clock> global_start;
-  std::atomic<std::chrono::time_point<std::chrono::high_resolution_clock>> global_end;
-
   cown_ptr<Body*> *bodies = new cown_ptr<Body*>[COWN_NUMBER];
 
   Scheduler& sched = Scheduler::get();
   sched.init(THREAD_NUMBER);
 
-  CownMemoryThread::create(MEMORY_LIMIT_MB, MONITOR_SLEEP_MICROSECS);
+  if (!uninstrumented)
+    CownMemoryThread::create(MEMORY_LIMIT_MB, MONITOR_SLEEP_MICROSECS, SWAP_ALGO);
+
   init_bodies(bodies);
 
-  std::thread bs(behaviour_spawning_thread, bodies, std::ref(latency), std::ref(global_start), std::ref(global_end));
+  std::thread bs(behaviour_spawning_thread, bodies, std::ref(latency), std::ref(memory_usage_average), std::ref(global_start), std::ref(global_end));
   sched.run();
   bs.join();
 
-  struct group_thousands : std::numpunct<char> 
+  delete[] bodies;
+}
+
+void print_results(long double total_runtime, uint64_t memory_usage_average, long double average_latency_s, long double throughput)
+{
+    struct group_thousands : std::numpunct<char>
   { std::string do_grouping() const override { return "\3"; } };
   std::cout.imbue(std::locale(std::cout.getloc(), new group_thousands));
+
+  std::cout << "Benchmark runtime: " << std::fixed << std::setprecision(3)
+            << total_runtime << " seconds" << std::endl;
+  std::cout << "Average memory usage: " << memory_usage_average  << " MB" << std::endl;
+  std::cout << "Average latency: " << std::fixed << std::setprecision(3)
+              << average_latency_s  << " microseconds" << std::endl;
+  std::cout << "Throughput: " << std::fixed << std::setprecision(3)
+              << throughput << " behaviours per second" << std::endl;
+}
+
+void write_to_file(long double total_runtime, uint64_t memory_usage_average, long double average_latency_s, long double throughput)
+{
+  if constexpr (WRITE_TO_FILE)
+  {
+    if (!std::filesystem::exists("results.csv"))
+    {
+      std::ofstream csv("results.csv");
+      std::stringstream csv_out;
+      csv_out << "SWAP_ALGO" << ','
+              << "COWN_NUMBER" << ','
+              << "COWN_DATA_SIZE" << ','
+              << "COWNS_PER_BEHAVIOUR" << ','
+              << "BEHAVIOUR_RUNTIME_MS" << ','
+              << "MEMORY_LIMIT_MB" << ','
+              << "MEMORY_THREAD_INTERVAL" << ','
+              << "STANDARD_DEVIATION" << ','
+              << "THREAD_NUMBER" << ','
+              << "TOTAL_BEHAVIOURS" << ','
+              << "INTER_ARRIVAL_MICROSECS" << ','
+              << "TOTAL_RUNTIME" << ','
+              << "AVERAGE_MEMORY_USAGE_MB" << ','
+              << "AVERAGE_LATENCY_S" << ','
+              << "THROUGHPUT" << ',' << std::endl;
+
+      csv << csv_out.str();
+      csv.close();
+    }
+
+    std::ofstream csv("results.csv", std::ios::app);
+    std::stringstream csv_out;
+    csv_out << (uninstrumented ? "Uninstrumented" : CownMemoryThread::algo_to_string(SWAP_ALGO)) << ','
+            << COWN_NUMBER << ','
+            << COWN_DATA_SIZE << ','
+            << COWNS_PER_BEHAVIOUR << ','
+            << BEHAVIOUR_RUNTIME_MS << ','
+            << MEMORY_LIMIT_MB << ','
+            << MONITOR_SLEEP_MICROSECS << ','
+            << STANDARD_DEVIATION << ','
+            << THREAD_NUMBER << ','
+            << TOTAL_BEHAVIOURS << ','
+            << INTER_ARRIVAL_MICROSECS << ','
+            << total_runtime << ','
+            << memory_usage_average << ','
+            << average_latency_s << ','
+            << throughput << ',' << std::endl;
+
+    csv << csv_out.str();
+    csv.close();
+  }
+}
+
+int main(int argc, char *argv[])
+{
+  std::srand(std::chrono::system_clock::now().time_since_epoch().count());
+  std::atomic_int64_t latency{0};
+  std::chrono::time_point<std::chrono::high_resolution_clock> global_start;
+  std::atomic<std::chrono::time_point<std::chrono::high_resolution_clock>> global_end;
+  uint64_t memory_usage_average;
+
+  read_input(argc, argv);
+
+  test_body(latency, memory_usage_average, global_start, global_end);
+
 
   long double total_runtime = 
     std::chrono::duration_cast<std::chrono::seconds>(global_end.load() - global_start).count();
   long double throughput = (long double) TOTAL_BEHAVIOURS / total_runtime;
-  long double average_latency_s = (long double) latency.load() / TOTAL_BEHAVIOURS / std::pow(10, 6);
+  long double average_latency_s = (long double) latency.load() / TOTAL_BEHAVIOURS;
 
-  std::cout << "Benchmark runtime: " << std::fixed << std::setprecision(3)
-            << total_runtime << " seconds" << std::endl;
-  std::cout << "Average latency: " << std::fixed << std::setprecision(3)
-              << average_latency_s  << " milliseconds" << std::endl;
-  std::cout << "Throughput: " << std::fixed << std::setprecision(3)
-              << throughput << " behaviours per second" << std::endl;
-  delete[] bodies;
+  print_results(total_runtime, memory_usage_average, average_latency_s, throughput);
+
+  write_to_file(total_runtime, memory_usage_average, average_latency_s, throughput);
 
   return 0;
 }

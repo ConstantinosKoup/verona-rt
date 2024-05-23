@@ -101,9 +101,24 @@ namespace verona::rt
             return a->num_accesses <= b->num_accesses;
         }
 
+        
+        static bool last_access_comparator(Cown *a, Cown *b)
+        {
+            return a->last_access <= b->last_access;
+        }
+
+        
+        static bool was_accessed(Cown *cown)
+        {
+            auto prev = cown->num_accesses.exchange(0);
+
+            return prev > 0;
+        }
+
         static bool set_in_memory(Cown *cown)
         {
             ++cown->num_accesses;
+            cown->last_access = std::chrono::steady_clock::now();
             if (cown->swapped)
             {
                 cown->swapped = false;
