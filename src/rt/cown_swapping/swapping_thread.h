@@ -39,6 +39,7 @@ namespace verona::cpp
         const SwappingAlgo swapping_algo;
 
         std::vector<Cown*> cowns;
+        size_t next_cown;
         std::mutex cowns_mutex;
         std::thread monitoring_thread;
         std::atomic_bool keep_monitoring;
@@ -51,6 +52,45 @@ namespace verona::cpp
 #endif
 
     private:
+        Cown *get_next_cown()
+        {
+            std::vector<verona::rt::Cown *>::iterator cown_it;
+            switch (swapping_algo)
+            {
+                case SwappingAlgo::LFU:
+                    cown_it = std::min_element(cowns.begin(), cowns.end(), CownSwapper::num_accesses_comparator);
+                    break;
+                case SwappingAlgo::LRU:
+                    cown_it = std::min_element(cowns.begin(), cowns.end(), CownSwapper::last_access_comparator);
+                    break;
+                case SwappingAlgo::RANDOM:
+                    cown_it = cowns.begin() + (std::rand() % cowns.size());
+                    break;
+                case SwappingAlgo::ROUND_ROBIN:
+                    cown_it = cowns.begin();
+                    break;
+                case SwappingAlgo::SECOND_CHANCE:
+                    size_t i = next_cown;
+                    while (true)
+                    {
+                        if (!CownSwapper::was_accessed(cowns[i]))
+                            break;
+                        if (++i == cowns.size())
+                            i = 0;
+                    }
+                    next_cown = i; 
+                    if (next_cown == cowns.size() - 1)
+                        next_cown = 0;
+                    cown_it = cowns.begin() + i;
+                    break;
+            }
+
+            auto cown = *cown_it;
+            cowns.erase(cown_it);
+
+            return cown;
+        }
+
         CownMemoryThread(size_t memory_limit_MB, size_t sleep_time, SwappingAlgo swapping_algo, bool debug) 
         : memory_limit_MB(memory_limit_MB), sleep_time(sleep_time), debug(debug), swapping_algo(swapping_algo)
         {
@@ -141,9 +181,7 @@ namespace verona::cpp
                     std::unique_lock<std::mutex> lock(cowns_mutex);
                     if (!cowns.empty())
                     {
-                        auto cown_it = cowns.begin() + (std::rand() % cowns.size());
-                        auto cown = *cown_it;
-                        cowns.erase(cown_it);
+                        auto cown = get_next_cown();
                         if (ActualCownSwapper::schedule_swap(cown, [this](Cown *cown) 
                                                                          { 
                                                                             std::unique_lock<std::mutex> lock(cowns_mutex);

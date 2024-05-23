@@ -75,7 +75,7 @@ void read_input(int argc, char *argv[])
   BEHAVIOUR_RUNTIME_MS = opt.is<size_t>("--BEHAVIOUR_RUNTIME_MS", 5);
   MEMORY_LIMIT_MB = opt.is<size_t>("--MEMORY_LIMIT_MB", 5000);
   STANDARD_DEVIATION = opt.is<double>("--STANDARD_DEVIATION", (long double) COWN_NUMBER / 6.0);
-  MONITOR_SLEEP_MICROSECS = opt.is<size_t>("--MONITOR_SLEEP_MICROSECS", 2500);
+  MONITOR_SLEEP_MICROSECS = opt.is<size_t>("--MONITOR_SLEEP_MICROSECS", 0);
   THREAD_NUMBER = opt.is<size_t>("--THREAD_NUMBER", 16);
   TOTAL_BEHAVIOURS = opt.is<size_t>("--TOTAL_BEHAVIOURS", 100000);
   INTER_ARRIVAL_MICROSECS = opt.is<size_t>("--INTER_ARRIVAL_MICROSECS", 500);
@@ -241,6 +241,7 @@ void write_to_file(long double total_runtime, long double average_latency_s, lon
               << "COWNS_PER_BEHAVIOUR" << ','
               << "BEHAVIOUR_RUNTIME_MS" << ','
               << "MEMORY_LIMIT_MB" << ','
+              << "MEMORY_THREAD_INTERVAL" << ','
               << "STANDARD_DEVIATION" << ','
               << "THREAD_NUMBER" << ','
               << "TOTAL_BEHAVIOURS" << ','
@@ -261,6 +262,7 @@ void write_to_file(long double total_runtime, long double average_latency_s, lon
             << COWNS_PER_BEHAVIOUR << ','
             << BEHAVIOUR_RUNTIME_MS << ','
             << MEMORY_LIMIT_MB << ','
+            << MONITOR_SLEEP_MICROSECS << ','
             << STANDARD_DEVIATION << ','
             << THREAD_NUMBER << ','
             << TOTAL_BEHAVIOURS << ','
