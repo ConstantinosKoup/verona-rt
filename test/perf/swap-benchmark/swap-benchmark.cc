@@ -24,7 +24,7 @@ size_t MONITOR_SLEEP_MICROSECS;
 size_t THREAD_NUMBER;
 size_t TOTAL_BEHAVIOURS;
 size_t INTER_ARRIVAL_MICROSECS;
-constexpr bool WRITE_TO_FILE = true;
+bool WRITE_TO_FILE;
 
 void read_swap_algo(opt::Opt& opt)
 {
@@ -69,16 +69,17 @@ void read_input(int argc, char *argv[])
   opt::Opt opt(argc, argv);
 
   read_swap_algo(opt);
-  COWN_NUMBER = opt.is<size_t>("--COWN_NUMBER", 10000);
-  COWN_DATA_SIZE = opt.is<size_t>("--COWN_DATA_SIZE", 1000000);
+  COWN_NUMBER = opt.is<size_t>("--COWN_NUMBER", 50000);
+  COWN_DATA_SIZE = opt.is<size_t>("--COWN_DATA_SIZE", 200000);
   COWNS_PER_BEHAVIOUR = opt.is<size_t>("--COWNS_PER_BEHAVIOUR", 2);
-  BEHAVIOUR_RUNTIME_MS = opt.is<size_t>("--BEHAVIOUR_RUNTIME_MS", 5);
-  MEMORY_LIMIT_MB = opt.is<size_t>("--MEMORY_LIMIT_MB", 5000);
+  BEHAVIOUR_RUNTIME_MS = opt.is<size_t>("--BEHAVIOUR_RUNTIME_MS", 3);
+  MEMORY_LIMIT_MB = opt.is<size_t>("--MEMORY_LIMIT_MB", 6000);
   STANDARD_DEVIATION = opt.is<double>("--STANDARD_DEVIATION", (long double) COWN_NUMBER / 6.0);
-  MONITOR_SLEEP_MICROSECS = opt.is<size_t>("--MONITOR_SLEEP_MICROSECS", 0);
-  THREAD_NUMBER = opt.is<size_t>("--THREAD_NUMBER", 16);
-  TOTAL_BEHAVIOURS = opt.is<size_t>("--TOTAL_BEHAVIOURS", 100000);
-  INTER_ARRIVAL_MICROSECS = opt.is<size_t>("--INTER_ARRIVAL_MICROSECS", 500);
+  MONITOR_SLEEP_MICROSECS = opt.is<size_t>("--MONITOR_SLEEP_MICROSECS", 250);
+  THREAD_NUMBER = opt.is<size_t>("--THREAD_NUMBER", 12);
+  TOTAL_BEHAVIOURS = opt.is<size_t>("--TOTAL_BEHAVIOURS", 1000000);
+  INTER_ARRIVAL_MICROSECS = opt.is<size_t>("--INTER_ARRIVAL_MICROSECS", 250);
+  WRITE_TO_FILE = !opt.has("--DONT_SAVE");
 }
 
 class Body
@@ -180,14 +181,23 @@ void behaviour_spawning_thread(cown_ptr<Body*> *bodies,
     auto spawn_time = std::chrono::high_resolution_clock::now();
     when(ca) << [spawn_time, &latency, &global_end](...)
     {
-      std::this_thread::sleep_for(std::chrono::milliseconds(BEHAVIOUR_RUNTIME_MS));
+      using namespace std::chrono;
+      auto start_time = high_resolution_clock::now();
 
-      auto end = std::chrono::high_resolution_clock::now();
-      latency.fetch_add(std::chrono::duration_cast<std::chrono::microseconds>(end - spawn_time).count());
-      global_end.store(end, std::memory_order_acq_rel);
+      volatile size_t dummy;
+      while (duration_cast<milliseconds>(high_resolution_clock::now() - start_time).count() < BEHAVIOUR_RUNTIME_MS)
+      { ++dummy; }
+
+      auto end_time = high_resolution_clock::now();
+      latency.fetch_add(duration_cast<microseconds>(end_time - spawn_time).count());
+      global_end.store(end_time, std::memory_order_acq_rel);
     };
 
-    std::this_thread::sleep_for(std::chrono::microseconds(INTER_ARRIVAL_MICROSECS));
+    static std::default_random_engine generator(static_cast<long unsigned int>(time(0)));
+    std::normal_distribution<double> distribution(INTER_ARRIVAL_MICROSECS / 10, INTER_ARRIVAL_MICROSECS / 10);
+    volatile size_t duration = (INTER_ARRIVAL_MICROSECS - INTER_ARRIVAL_MICROSECS / 10) + distribution(generator);
+
+    std::this_thread::sleep_for(std::chrono::microseconds(duration));
   }
 
   when() << [&memory_usage_average]()
@@ -237,7 +247,7 @@ void print_results(long double total_runtime, uint64_t memory_usage_average, lon
 
 void write_to_file(long double total_runtime, uint64_t memory_usage_average, long double average_latency_s, long double throughput)
 {
-  if constexpr (WRITE_TO_FILE)
+  if (WRITE_TO_FILE)
   {
     if (!std::filesystem::exists("results.csv"))
     {

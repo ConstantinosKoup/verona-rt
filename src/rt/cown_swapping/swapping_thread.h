@@ -7,6 +7,7 @@
 #include <thread>
 #include <chrono>
 #include <queue>
+#include <cmath>
 
 #ifdef _WIN32 // Windows-specific headers
 #include <Windows.h>
@@ -174,7 +175,7 @@ namespace verona::cpp
 #else
                 if (std::chrono::system_clock::now() > prev_t + std::chrono::seconds(1))
                 {
-                    std::cout << "Memory Usage: " << memory_usage_MB << " MB" << std::endl;
+                    std::cout << "Memory Usage: " << memory_usage_MB << " MB, " << cowns.size() << std::endl;
                     prev_t = std::chrono::system_clock::now();
                     if (keep_average)
                     {
@@ -185,18 +186,28 @@ namespace verona::cpp
 #endif
 
                 yield();
-                if (memory_limit_MB > 0 && memory_usage_MB >= memory_limit_MB * 9 / 10)
+                if (memory_limit_MB > 0 && memory_usage_MB > memory_limit_MB * 9 / 10)
                 {
                     std::unique_lock<std::mutex> lock(cowns_mutex);
                     if (!cowns.empty())
                     {
-                        auto cown = get_next_cown();
-                        if (ActualCownSwapper::schedule_swap(cown, [this](Cown *cown) 
-                                                                         { 
+                        const size_t NUM_TO_SWAP = (size_t) std::ceil(cowns.size() / 2 * (((double) memory_usage_MB / memory_limit_MB) - 0.9));
+                        // std::cout << "NUM_TO_SWAP: " << NUM_TO_SWAP << std::endl;
+                        if (NUM_TO_SWAP > 0)
+                        {
+                            size_t actual_num_to_swap = 0;
+                            Cown *cowns_for_swap[NUM_TO_SWAP];
+                            for ( ; !cowns.empty() && actual_num_to_swap < NUM_TO_SWAP; ++actual_num_to_swap)
+                            {
+                                auto cown = get_next_cown();
+                                cowns_for_swap[actual_num_to_swap] = cown;
+                            }
+                            ActualCownSwapper::schedule_swap(actual_num_to_swap, cowns_for_swap, [this](Cown *cown) 
+                                                                        { 
                                                                             std::unique_lock<std::mutex> lock(cowns_mutex);
                                                                             cowns.push_back(cown); 
-                                                                        }))
-                            CownSwapper::unregister_cown(cown);
+                                                                        });
+                        }
                     }
                 }
 #ifdef USE_SYSTEMATIC_TESTING

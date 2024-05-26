@@ -40,18 +40,26 @@ namespace verona::rt
             return !cown->swapped;
         }
 
-        static auto get_swap_lambda(Cown* cown)
+        static auto get_swap_lambda(size_t count, Cown** cowns)
         {
-            auto swap_lambda = [cown]()
+            auto swap_lambda = [=]()
             {
                 auto cown_dir = get_cown_dir();
-                std::stringstream filename;
-                filename << cown << ".cown";
-                std::fstream ofs(cown_dir / filename.str(), std::ios::out | std::ios::binary);
+                for (size_t i = 0; i < count; ++i)
+                {
+                    std::stringstream filename;
+                    filename << cowns[i] << ".cown";
+                    std::fstream ofs(cown_dir / filename.str(), std::ios::out | std::ios::binary);
 
-                cown->serialize(ofs);
+                    cowns[i]->serialize(ofs);
 
-                ofs.close();
+                    ofs.close();
+                }
+
+                // std::cout << "Swapped " << count << " cowns" << std::endl;
+            
+                auto& alloc = ThreadAlloc::get();
+                alloc.dealloc(cowns);
             };
             
             return swap_lambda;
@@ -69,6 +77,8 @@ namespace verona::rt
                 cown->serialize(ifs);
                 
                 ifs.close();
+
+                // std::cout << "Fetching cown " << cown << std::endl;
 
                 register_cown(cown);
                 register_to_thread(cown);

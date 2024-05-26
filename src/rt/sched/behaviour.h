@@ -64,7 +64,7 @@ namespace verona::rt
     }
 
     template<TransferOwnership transfer = NoTransfer, class T>
-    static void schedule(size_t count, Cown** cowns, T&& f)
+    static void schedule(size_t count, Cown** cowns, T&& f, bool is_swap = false)
     {
       // TODO Remove vector allocation here.  This is a temporary fix to
       // as we transition to using Request through the code base.
@@ -80,7 +80,7 @@ namespace verona::rt
         }
       }
 
-      schedule<T>(count, requests, std::forward<T>(f));
+      schedule<T>(count, requests, std::forward<T>(f), is_swap);
 
       alloc.dealloc(requests);
     }
@@ -107,12 +107,12 @@ namespace verona::rt
     }
 
     template<class T>
-    static void schedule(size_t count, Request* requests, T&& f)
+    static void schedule(size_t count, Request* requests, T&& f, bool is_swap = false)
     {
       Logging::cout() << "Schedule behaviour of type: " << typeid(T).name()
                       << Logging::endl;
 
-      auto* body = prepare_to_schedule<T>(count, requests, std::forward<T>(f));
+      auto* body = prepare_to_schedule<T>(count, requests, std::forward<T>(f), is_swap);
 
       BehaviourCore* arr[] = {body};
 

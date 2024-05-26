@@ -15,19 +15,6 @@ namespace verona::cpp
 
     class ActualCownSwapper {
     private:
-        template<typename T>
-        static void schedule_swap_lambda(Cown* cown, T&& f)
-        {
-            Logging::cout() << "Scheduling swap for cown " << cown << Logging::endl;
-            Request requests[] = {Request::write(cown)};
-            requests[0].mark_move();
-            BehaviourCore *b = 
-                Behaviour::prepare_to_schedule<T>(1, requests, std::forward<T>(f), /* is_swap */ true);
-            
-            BehaviourCore *arr[] = {b};
-            BehaviourCore::schedule_many(arr, 1);
-        }
-
         template<typename Be>
         static void dealloc_fetch(BehaviourCore* behaviour)
         {
@@ -49,17 +36,23 @@ namespace verona::cpp
             CownSwapper::set_fetch_behaviour(cown, fetch_behaviour, dealloc_fetch<decltype(fetch_lambda)>);
         }
 
-        static bool schedule_swap(Cown *cown, std::function<void(Cown *)> register_to_thread)
+        static void schedule_swap(size_t count, Cown **cowns, std::function<void(Cown *)> register_to_thread)
         {
-            if (!CownSwapper::acquire_strong(cown))
-                return false;
-            set_fetch_behaviour(cown, register_to_thread);
+            size_t new_size = 0;
+            auto& alloc = ThreadAlloc::get();
+            auto** new_cowns = (Cown**)alloc.alloc(count * sizeof(Cown*));
+            for (size_t i = 0; i < count; ++i)
+            {
+                if (CownSwapper::acquire_strong(cowns[i]))
+                {
+                    set_fetch_behaviour(cowns[i], register_to_thread);
+                    new_cowns[new_size++] = cowns[i];
+                }
+            }
 
-            auto swap_lambda = CownSwapper::get_swap_lambda(cown);
-            schedule_swap_lambda(cown, std::forward<decltype(swap_lambda)>(swap_lambda));
-            return true;
+            auto swap_lambda = CownSwapper::get_swap_lambda(new_size, new_cowns);
+            Behaviour::schedule<YesTransfer>(new_size, new_cowns, std::forward<decltype(swap_lambda)>(swap_lambda), true);
         }
-
 
         friend class CownMemoryThread;
         
@@ -106,7 +99,7 @@ namespace verona::cpp
                 return;
             }
             
-            schedule_swap(cown, [](Cown *cown){});
+            schedule_swap(1, &cown, [](Cown *cown){});
         }
     };
 
