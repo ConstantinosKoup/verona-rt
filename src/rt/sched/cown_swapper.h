@@ -12,16 +12,15 @@
 namespace verona::rt
 {
     class BehaviourCore;
+    using cown_pair = std::pair<Cown *, size_t>;
 
     class CownSwapper {
     private:
         static std::filesystem::path get_cown_dir()
         {
             namespace fs = std::filesystem;
-            // fs::path cown_dir = fs::temp_directory_path() / "verona-rt" / "cowns";
+            fs::path cown_dir = fs::temp_directory_path() / "verona-rt" / "cowns";
 
-            fs::path cown_dir("/home/kon/Downloads/verona-rt");
-            
             // should be called once at the start of the runtime
             fs::create_directories(cown_dir);
             fs::permissions(cown_dir, fs::perms::owner_all);
@@ -67,22 +66,22 @@ namespace verona::rt
             return swap_lambda;
         }
 
-        static auto get_fetch_lambda(Cown *cown, std::function<void(Cown *)> register_to_thread)
+        static auto get_fetch_lambda(cown_pair cown, std::function<void(cown_pair)> register_to_thread)
         {
             return [cown, register_to_thread]()
             {
                 auto cown_dir = get_cown_dir();
                 std::stringstream filename;
-                filename << cown << ".cown";
+                filename << cown.first << ".cown";
                 std::fstream ifs(cown_dir / filename.str(), std::ios::in | std::ios::binary);
 
-                cown->serialize(ifs);
+                cown.first->serialize(ifs);
                 
                 ifs.close();
 
                 // std::cout << "Fetching cown " << cown << std::endl;
 
-                register_cown(cown);
+                register_cown(cown.first);
                 register_to_thread(cown);
             };
         }
@@ -108,15 +107,15 @@ namespace verona::rt
             return false;
         }
 
-        static bool num_accesses_comparator(Cown *a, Cown *b)
+        static bool num_accesses_comparator(cown_pair a, cown_pair b)
         {
-            return a->num_accesses <= b->num_accesses;
+            return a.first->num_accesses <= b.first->num_accesses;
         }
 
         
-        static bool last_access_comparator(Cown *a, Cown *b)
+        static bool last_access_comparator(cown_pair a, cown_pair b)
         {
-            return a->last_access <= b->last_access;
+            return a.first->last_access <= b.first->last_access;
         }
 
         

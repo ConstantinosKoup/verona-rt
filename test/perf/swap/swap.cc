@@ -48,6 +48,11 @@ public:
     return nullptr;
   }
 
+  static size_t size(Body *body)
+  {
+    return sizeof(id) + sizeof(data_size) + body->data_size * sizeof(char);
+  }
+
   ~Body()
   {
     delete data;

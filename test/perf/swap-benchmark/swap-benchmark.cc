@@ -18,12 +18,13 @@ size_t COWN_NUMBER;
 size_t COWN_DATA_SIZE;
 size_t COWNS_PER_BEHAVIOUR;
 size_t BEHAVIOUR_RUNTIME_MS;
-size_t MEMORY_LIMIT_MB;
+size_t MEMORY_TARGET_MB;
 long double STANDARD_DEVIATION;
 size_t MONITOR_SLEEP_MICROSECS;
 size_t THREAD_NUMBER;
 size_t TOTAL_BEHAVIOURS;
 size_t INTER_ARRIVAL_MICROSECS;
+size_t INTER_ARRIVAL_STANDARD_DEVIATION;
 bool WRITE_TO_FILE;
 
 void read_swap_algo(opt::Opt& opt)
@@ -72,13 +73,14 @@ void read_input(int argc, char *argv[])
   COWN_NUMBER = opt.is<size_t>("--COWN_NUMBER", 50000);
   COWN_DATA_SIZE = opt.is<size_t>("--COWN_DATA_SIZE", 200000);
   COWNS_PER_BEHAVIOUR = opt.is<size_t>("--COWNS_PER_BEHAVIOUR", 2);
-  BEHAVIOUR_RUNTIME_MS = opt.is<size_t>("--BEHAVIOUR_RUNTIME_MS", 1);
-  MEMORY_LIMIT_MB = opt.is<size_t>("--MEMORY_LIMIT_MB", 3000);
+  BEHAVIOUR_RUNTIME_MS = opt.is<size_t>("--BEHAVIOUR_RUNTIME_MS", 3);
+  MEMORY_TARGET_MB = opt.is<size_t>("--MEMORY_TARGET_MB", 5000);
   STANDARD_DEVIATION = opt.is<double>("--STANDARD_DEVIATION", (long double) COWN_NUMBER / 6.0);
-  MONITOR_SLEEP_MICROSECS = opt.is<size_t>("--MONITOR_SLEEP_MICROSECS", 250);
-  THREAD_NUMBER = opt.is<size_t>("--THREAD_NUMBER", 4);
-  TOTAL_BEHAVIOURS = opt.is<size_t>("--TOTAL_BEHAVIOURS", 1000000);
+  MONITOR_SLEEP_MICROSECS = opt.is<size_t>("--MONITOR_SLEEP_MICROSECS", 3000);
+  THREAD_NUMBER = opt.is<size_t>("--THREAD_NUMBER", 12);
+  TOTAL_BEHAVIOURS = opt.is<size_t>("--TOTAL_BEHAVIOURS", 100000);
   INTER_ARRIVAL_MICROSECS = opt.is<size_t>("--INTER_ARRIVAL_MICROSECS", 1500);
+  INTER_ARRIVAL_STANDARD_DEVIATION = opt.is<size_t>("--INTER_ARRIVAL_STANDARD_DEVIATION", INTER_ARRIVAL_MICROSECS / 30);
   WRITE_TO_FILE = !opt.has("--DONT_SAVE");
 }
 
@@ -116,6 +118,11 @@ public:
     archive.write((char*)&body->data_size, sizeof(body->data_size));
     archive.write(body->data, body->data_size);
     return nullptr;
+  }
+
+  static size_t size(Body *body)
+  {
+    return sizeof(id) + sizeof(data_size) + body->data_size * sizeof(char);
   }
 
   ~Body()
@@ -194,7 +201,7 @@ void behaviour_spawning_thread(cown_ptr<Body*> *bodies,
     };
 
     static std::default_random_engine generator(static_cast<long unsigned int>(time(0)));
-    std::normal_distribution<double> distribution(INTER_ARRIVAL_MICROSECS / 10, INTER_ARRIVAL_MICROSECS / 10);
+    std::normal_distribution<double> distribution(INTER_ARRIVAL_MICROSECS / 10, INTER_ARRIVAL_MICROSECS / 30);
     volatile size_t duration = (INTER_ARRIVAL_MICROSECS - INTER_ARRIVAL_MICROSECS / 10) + distribution(generator);
 
     std::this_thread::sleep_for(std::chrono::microseconds(duration));
@@ -220,7 +227,7 @@ void test_body(std::atomic_int64_t& latency,
   sched.init(THREAD_NUMBER);
 
   if (!uninstrumented)
-    CownMemoryThread::create(MEMORY_LIMIT_MB, MONITOR_SLEEP_MICROSECS, SWAP_ALGO);
+    CownMemoryThread::create(MEMORY_TARGET_MB, MONITOR_SLEEP_MICROSECS, SWAP_ALGO);
 
   init_bodies(bodies);
 
@@ -259,12 +266,13 @@ void write_to_file(long double total_runtime, uint64_t memory_usage_average, lon
               << "COWN_DATA_SIZE" << ','
               << "COWNS_PER_BEHAVIOUR" << ','
               << "BEHAVIOUR_RUNTIME_MS" << ','
-              << "MEMORY_LIMIT_MB" << ','
+              << "MEMORY_TARGET_MB" << ','
               << "MEMORY_THREAD_INTERVAL" << ','
               << "STANDARD_DEVIATION" << ','
               << "THREAD_NUMBER" << ','
               << "TOTAL_BEHAVIOURS" << ','
               << "INTER_ARRIVAL_MICROSECS" << ','
+              << "INTER_ARRIVAL_STANDARD_DEVIATION" << ','
               << "TOTAL_RUNTIME" << ','
               << "AVERAGE_MEMORY_USAGE_MB" << ','
               << "AVERAGE_LATENCY_S" << ','
@@ -281,12 +289,13 @@ void write_to_file(long double total_runtime, uint64_t memory_usage_average, lon
             << COWN_DATA_SIZE << ','
             << COWNS_PER_BEHAVIOUR << ','
             << BEHAVIOUR_RUNTIME_MS << ','
-            << MEMORY_LIMIT_MB << ','
+            << MEMORY_TARGET_MB << ','
             << MONITOR_SLEEP_MICROSECS << ','
             << STANDARD_DEVIATION << ','
             << THREAD_NUMBER << ','
             << TOTAL_BEHAVIOURS << ','
             << INTER_ARRIVAL_MICROSECS << ','
+            << INTER_ARRIVAL_STANDARD_DEVIATION << ','
             << total_runtime << ','
             << memory_usage_average << ','
             << average_latency_s << ','
