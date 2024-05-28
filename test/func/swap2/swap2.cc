@@ -34,6 +34,11 @@ public:
     return nullptr;
   }
 
+  static size_t size(Body *body)
+  {
+    return body->message.size() * sizeof(sizeof(char)) + sizeof(_num);
+  }
+
   ~Body()
   {
     Logging::cout() << "Body destroyed" << Logging::endl;

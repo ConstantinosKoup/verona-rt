@@ -7,6 +7,7 @@
 #include <thread>
 #include <chrono>
 #include <queue>
+#include <cmath>
 
 #ifdef _WIN32 // Windows-specific headers
 #include <Windows.h>
@@ -19,6 +20,7 @@
 namespace verona::cpp
 {
     using namespace verona::rt;
+    using cown_pair = std::pair<Cown *, size_t>;
 
     class CownMemoryThread
     {
@@ -42,7 +44,7 @@ namespace verona::cpp
         uint64_t sum{0};
         size_t measure_count{0};
 
-        std::vector<Cown*> cowns;
+        std::vector<cown_pair> cowns;
         size_t next_cown;
         std::mutex cowns_mutex;
         std::thread monitoring_thread;
@@ -56,9 +58,9 @@ namespace verona::cpp
 #endif
 
     private:
-        Cown *get_next_cown()
+        cown_pair get_next_cown()
         {
-            std::vector<verona::rt::Cown *>::iterator cown_it;
+            std::vector<cown_pair>::iterator cown_it;
             switch (swapping_algo)
             {
                 case SwappingAlgo::LFU:
@@ -77,7 +79,7 @@ namespace verona::cpp
                     size_t i = next_cown;
                     while (true)
                     {
-                        if (!CownSwapper::was_accessed(cowns[i]))
+                        if (!CownSwapper::was_accessed(cowns[i].first))
                             break;
                         if (++i == cowns.size())
                             i = 0;
@@ -153,7 +155,7 @@ namespace verona::cpp
             std::unique_lock<std::mutex> lock(cowns_mutex);
             while (!cowns.empty())
             {
-                CownSwapper::unregister_cown(cowns.back());
+                CownSwapper::unregister_cown(cowns.back().first);
                 cowns.pop_back();
             }
         }
@@ -174,7 +176,7 @@ namespace verona::cpp
 #else
                 if (std::chrono::system_clock::now() > prev_t + std::chrono::seconds(1))
                 {
-                    std::cout << "Memory Usage: " << memory_usage_MB << " MB" << std::endl;
+                    std::cout << "Memory Usage: " << memory_usage_MB << " MB, " << cowns.size() << std::endl;
                     prev_t = std::chrono::system_clock::now();
                     if (keep_average)
                     {
@@ -185,19 +187,23 @@ namespace verona::cpp
 #endif
 
                 yield();
-                if (memory_limit_MB > 0 && memory_usage_MB >= memory_limit_MB * 9 / 10)
+                if (memory_limit_MB > 0 && memory_usage_MB > memory_limit_MB * 9 / 10)
                 {
                     std::unique_lock<std::mutex> lock(cowns_mutex);
-                    if (!cowns.empty())
+                    int64_t mem_to_swap_bytes = (memory_usage_MB - (memory_limit_MB * 9 / 10)) * 1024 * 1024;
+                    std::vector<cown_pair> cowns_to_swap;
+                    while (!cowns.empty() && mem_to_swap_bytes > 0)
                     {
                         auto cown = get_next_cown();
-                        if (ActualCownSwapper::schedule_swap(cown, [this](Cown *cown) 
-                                                                         { 
-                                                                            std::unique_lock<std::mutex> lock(cowns_mutex);
-                                                                            cowns.push_back(cown); 
-                                                                        }))
-                            CownSwapper::unregister_cown(cown);
+                        cowns_to_swap.push_back(cown);
+                        mem_to_swap_bytes -= cown.second;
                     }
+
+                    ActualCownSwapper::schedule_swap(cowns_to_swap.size(), cowns_to_swap.data(), [this](cown_pair cown) 
+                                                                { 
+                                                                    std::unique_lock<std::mutex> lock(cowns_mutex);
+                                                                    cowns.push_back(cown); 
+                                                                });
                 }
 #ifdef USE_SYSTEMATIC_TESTING
                 else if (registered.load(std::memory_order_relaxed) && nothing_loop_count++ > 20)
@@ -291,6 +297,7 @@ namespace verona::cpp
                 return 0;
             }
 
+            std::cout << "Stop called" << std::endl;
             ref.running.store(false, std::memory_order_acq_rel);
             ref.keep_monitoring.store(false, std::memory_order_acq_rel);
 
@@ -312,12 +319,12 @@ namespace verona::cpp
 
             for (size_t i = 0; i < count; ++i)
             {
-                auto cown = ActualCownSwapper::register_cown(cown_ptrs[i]);
-                if (cown == nullptr)
+                auto cown_pair = ActualCownSwapper::register_cown(cown_ptrs[i]);
+                if (cown_pair.first == nullptr)
                     return false;
 
                 std::unique_lock<std::mutex> lock(ref.cowns_mutex);
-                ref.cowns.push_back(cown);
+                ref.cowns.push_back(cown_pair);
             }
 
         // In systematic testing, stop monitoring never gets called because it waits until all threads terminate before

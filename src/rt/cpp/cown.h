@@ -59,6 +59,15 @@ namespace verona::cpp
     : std::true_type
     {};
 
+    template<typename TT, class = void>
+    struct has_size
+    : std::false_type
+    {};
+    template<typename TT>
+    struct has_size<TT, std::enable_if_t<std::is_same_v<size_t(T), decltype(TT::size)>>>
+    : std::true_type
+    {};
+
     template<typename TT>
     friend class acquired_cown;
 
@@ -79,7 +88,7 @@ namespace verona::cpp
     }
     struct is_serializable
     {
-      constexpr static bool value = std::is_pointer_v<T> && has_serialize<BaseT>::value;
+      constexpr static bool value = std::is_pointer_v<T> && has_serialize<BaseT>::value && has_size<BaseT>::value;
     };
 
     void serialize(std::iostream& archive)

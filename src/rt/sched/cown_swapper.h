@@ -12,6 +12,7 @@
 namespace verona::rt
 {
     class BehaviourCore;
+    using cown_pair = std::pair<Cown *, size_t>;
 
     class CownSwapper {
     private:
@@ -19,7 +20,7 @@ namespace verona::rt
         {
             namespace fs = std::filesystem;
             fs::path cown_dir = fs::temp_directory_path() / "verona-rt" / "cowns";
-            
+
             // should be called once at the start of the runtime
             fs::create_directories(cown_dir);
             fs::permissions(cown_dir, fs::perms::owner_all);
@@ -40,37 +41,47 @@ namespace verona::rt
             return !cown->swapped;
         }
 
-        static auto get_swap_lambda(Cown* cown)
+        static auto get_swap_lambda(size_t count, Cown** cowns)
         {
-            auto swap_lambda = [cown]()
+            auto swap_lambda = [=]()
             {
                 auto cown_dir = get_cown_dir();
-                std::stringstream filename;
-                filename << cown << ".cown";
-                std::fstream ofs(cown_dir / filename.str(), std::ios::out | std::ios::binary);
+                for (size_t i = 0; i < count; ++i)
+                {
+                    std::stringstream filename;
+                    filename << cowns[i] << ".cown";
+                    std::fstream ofs(cown_dir / filename.str(), std::ios::out | std::ios::binary);
 
-                cown->serialize(ofs);
+                    cowns[i]->serialize(ofs);
 
-                ofs.close();
+                    ofs.close();
+                }
+
+                std::cout << "Swapped " << count << " cowns" << std::endl;
+            
+                auto& alloc = ThreadAlloc::get();
+                alloc.dealloc(cowns);
             };
             
             return swap_lambda;
         }
 
-        static auto get_fetch_lambda(Cown *cown, std::function<void(Cown *)> register_to_thread)
+        static auto get_fetch_lambda(cown_pair cown, std::function<void(cown_pair)> register_to_thread)
         {
             return [cown, register_to_thread]()
             {
                 auto cown_dir = get_cown_dir();
                 std::stringstream filename;
-                filename << cown << ".cown";
+                filename << cown.first << ".cown";
                 std::fstream ifs(cown_dir / filename.str(), std::ios::in | std::ios::binary);
 
-                cown->serialize(ifs);
+                cown.first->serialize(ifs);
                 
                 ifs.close();
 
-                register_cown(cown);
+                // std::cout << "Fetching cown " << cown << std::endl;
+
+                register_cown(cown.first);
                 register_to_thread(cown);
             };
         }
@@ -96,15 +107,15 @@ namespace verona::rt
             return false;
         }
 
-        static bool num_accesses_comparator(Cown *a, Cown *b)
+        static bool num_accesses_comparator(cown_pair a, cown_pair b)
         {
-            return a->num_accesses <= b->num_accesses;
+            return a.first->num_accesses <= b.first->num_accesses;
         }
 
         
-        static bool last_access_comparator(Cown *a, Cown *b)
+        static bool last_access_comparator(cown_pair a, cown_pair b)
         {
-            return a->last_access <= b->last_access;
+            return a.first->last_access <= b.first->last_access;
         }
 
         
