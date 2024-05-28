@@ -18,7 +18,9 @@ namespace verona::rt
         static std::filesystem::path get_cown_dir()
         {
             namespace fs = std::filesystem;
-            fs::path cown_dir = fs::temp_directory_path() / "verona-rt" / "cowns";
+            // fs::path cown_dir = fs::temp_directory_path() / "verona-rt" / "cowns";
+
+            fs::path cown_dir("/home/kon/Downloads/verona-rt");
             
             // should be called once at the start of the runtime
             fs::create_directories(cown_dir);
@@ -56,7 +58,7 @@ namespace verona::rt
                     ofs.close();
                 }
 
-                // std::cout << "Swapped " << count << " cowns" << std::endl;
+                std::cout << "Swapped " << count << " cowns" << std::endl;
             
                 auto& alloc = ThreadAlloc::get();
                 alloc.dealloc(cowns);

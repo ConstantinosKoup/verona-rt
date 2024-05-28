@@ -147,6 +147,14 @@ namespace verona::cpp
             fclose(file);
             return result;
         }
+
+
+        static int getMemoryUsage2(){ //Note: this value is in KB!
+            struct rusage usage;
+            getrusage(RUSAGE_SELF, &usage);
+
+            return usage.ru_ixrss;
+        }
 #endif
 
         void unregister_cowns()
@@ -176,6 +184,7 @@ namespace verona::cpp
                 if (std::chrono::system_clock::now() > prev_t + std::chrono::seconds(1))
                 {
                     std::cout << "Memory Usage: " << memory_usage_MB << " MB, " << cowns.size() << std::endl;
+                    std::cout << "Memory Usage: " << getMemoryUsage2() / 1024 << " MB" << std::endl;
                     prev_t = std::chrono::system_clock::now();
                     if (keep_average)
                     {
@@ -191,8 +200,11 @@ namespace verona::cpp
                     std::unique_lock<std::mutex> lock(cowns_mutex);
                     if (!cowns.empty())
                     {
-                        const size_t NUM_TO_SWAP = (size_t) std::ceil(cowns.size() / 2 * (((double) memory_usage_MB / memory_limit_MB) - 0.9));
+                        size_t NUM_TO_SWAP = (size_t) std::ceil(cowns.size() / 2 * (((double) memory_usage_MB / memory_limit_MB) - 0.9));
                         // std::cout << "NUM_TO_SWAP: " << NUM_TO_SWAP << std::endl;
+                        if (!keep_average && NUM_TO_SWAP > cowns.size() / 10)
+                            NUM_TO_SWAP = cowns.size() / 10;
+
                         if (NUM_TO_SWAP > 0)
                         {
                             size_t actual_num_to_swap = 0;
@@ -302,6 +314,7 @@ namespace verona::cpp
                 return 0;
             }
 
+            std::cout << "Stop called" << std::endl;
             ref.running.store(false, std::memory_order_acq_rel);
             ref.keep_monitoring.store(false, std::memory_order_acq_rel);
 

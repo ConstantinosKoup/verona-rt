@@ -72,13 +72,13 @@ void read_input(int argc, char *argv[])
   COWN_NUMBER = opt.is<size_t>("--COWN_NUMBER", 50000);
   COWN_DATA_SIZE = opt.is<size_t>("--COWN_DATA_SIZE", 200000);
   COWNS_PER_BEHAVIOUR = opt.is<size_t>("--COWNS_PER_BEHAVIOUR", 2);
-  BEHAVIOUR_RUNTIME_MS = opt.is<size_t>("--BEHAVIOUR_RUNTIME_MS", 3);
-  MEMORY_LIMIT_MB = opt.is<size_t>("--MEMORY_LIMIT_MB", 6000);
+  BEHAVIOUR_RUNTIME_MS = opt.is<size_t>("--BEHAVIOUR_RUNTIME_MS", 1);
+  MEMORY_LIMIT_MB = opt.is<size_t>("--MEMORY_LIMIT_MB", 3000);
   STANDARD_DEVIATION = opt.is<double>("--STANDARD_DEVIATION", (long double) COWN_NUMBER / 6.0);
   MONITOR_SLEEP_MICROSECS = opt.is<size_t>("--MONITOR_SLEEP_MICROSECS", 250);
-  THREAD_NUMBER = opt.is<size_t>("--THREAD_NUMBER", 12);
+  THREAD_NUMBER = opt.is<size_t>("--THREAD_NUMBER", 4);
   TOTAL_BEHAVIOURS = opt.is<size_t>("--TOTAL_BEHAVIOURS", 1000000);
-  INTER_ARRIVAL_MICROSECS = opt.is<size_t>("--INTER_ARRIVAL_MICROSECS", 250);
+  INTER_ARRIVAL_MICROSECS = opt.is<size_t>("--INTER_ARRIVAL_MICROSECS", 1500);
   WRITE_TO_FILE = !opt.has("--DONT_SAVE");
 }
 
@@ -199,6 +199,7 @@ void behaviour_spawning_thread(cown_ptr<Body*> *bodies,
 
     std::this_thread::sleep_for(std::chrono::microseconds(duration));
   }
+  std::cout << "Finished spawning behaviours" << std::endl;
 
   when() << [&memory_usage_average]()
   {
