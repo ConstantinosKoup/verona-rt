@@ -41,9 +41,9 @@ namespace verona::rt
             return !cown->swapped;
         }
 
-        static auto get_swap_lambda(size_t count, Cown** cowns)
+        static auto get_swap_lambda(size_t count, Cown** cowns, size_t swap_size, std::atomic_uint64_t& to_be_swapped)
         {
-            auto swap_lambda = [=]()
+            auto swap_lambda = [=, &to_be_swapped]()
             {
                 auto cown_dir = get_cown_dir();
                 for (size_t i = 0; i < count; ++i)
@@ -57,8 +57,9 @@ namespace verona::rt
                     ofs.close();
                 }
 
-                std::cout << "Swapped " << count << " cowns" << std::endl;
-            
+                std::cout << "<<<<<<<<<<<<<<<<<<<<<<<<< Swapped " << count << "cowns" << std::endl;
+                to_be_swapped.store(0, std::memory_order_release);
+                // to_be_swapped.fetch_sub(swap_size);
                 auto& alloc = ThreadAlloc::get();
                 alloc.dealloc(cowns);
             };
@@ -79,7 +80,7 @@ namespace verona::rt
                 
                 ifs.close();
 
-                // std::cout << "Fetching cown " << cown << std::endl;
+                // std::cout << "Fetching cown " << cown.first << std::endl;
 
                 register_cown(cown.first);
                 register_to_thread(cown);

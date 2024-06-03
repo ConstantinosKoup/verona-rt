@@ -97,8 +97,8 @@ namespace verona::cpp
       {
         T new_value = BaseT::serialize(value, archive);
 
-        if (value != nullptr)
-          delete value;
+        // if (value != nullptr)
+        //   delete value;
           
         value = new_value;
       }

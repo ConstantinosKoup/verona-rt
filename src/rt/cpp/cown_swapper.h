@@ -36,10 +36,13 @@ namespace verona::cpp
             CownSwapper::set_fetch_behaviour(cown.first, fetch_behaviour, dealloc_fetch<decltype(fetch_lambda)>);
         }
 
-        static void schedule_swap(size_t count, cown_pair *cowns, std::function<void(cown_pair)> register_to_thread)
+        static void schedule_swap(size_t count, cown_pair *cowns, std::atomic_uint64_t& to_be_swapped, int64_t swap_size, std::function<void(cown_pair)> register_to_thread)
         {
             if (count == 0)
+            {
+                to_be_swapped.store(0, std::memory_order_release);
                 return;
+            }
 
             size_t new_size = 0;
             auto& alloc = ThreadAlloc::get();
@@ -53,7 +56,7 @@ namespace verona::cpp
                 }
             }
 
-            auto swap_lambda = CownSwapper::get_swap_lambda(new_size, new_cowns);
+            auto swap_lambda = CownSwapper::get_swap_lambda(new_size, new_cowns, swap_size, to_be_swapped);
             Behaviour::schedule<YesTransfer>(new_size, new_cowns, std::forward<decltype(swap_lambda)>(swap_lambda), true);
         }
 
@@ -110,8 +113,10 @@ namespace verona::cpp
             }
 
             cown_pair pair = {cown, sizeof_cown(cown)};
+            std::atomic_uint64_t to_be_swapped{0};
+            size_t swap_size = 0;
             
-            schedule_swap(1, &pair, [](cown_pair p){});
+            schedule_swap(1, &pair, to_be_swapped, swap_size, [](cown_pair p){});
         }
     };
 
