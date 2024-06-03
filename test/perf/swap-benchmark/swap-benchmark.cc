@@ -17,7 +17,7 @@ bool uninstrumented{false};
 size_t COWN_NUMBER;
 size_t COWN_DATA_SIZE;
 size_t COWNS_PER_BEHAVIOUR;
-size_t BEHAVIOUR_RUNTIME_MS;
+size_t BEHAVIOUR_RUNTIME_MICROSECONDS;
 size_t MEMORY_TARGET_MB;
 long double ACCESS_STANDARD_DEVIATION;
 size_t MONITOR_SLEEP_MICROSECS;
@@ -70,7 +70,7 @@ void read_input(int argc, char *argv[])
   opt::Opt opt(argc, argv);
 
   read_swap_algo(opt);
-  MEMORY_TARGET_MB = opt.is<size_t>("--MEMORY_TARGET_MB", 6000);
+  MEMORY_TARGET_MB = opt.is<size_t>("--MEMORY_TARGET_MB", 7000);
   
   COWN_NUMBER = opt.is<size_t>("--COWN_NUMBER", 50000);
   COWN_DATA_SIZE = opt.is<size_t>("--COWN_DATA_SIZE", 200000);
@@ -78,16 +78,16 @@ void read_input(int argc, char *argv[])
   COWNS_PER_BEHAVIOUR = opt.is<size_t>("--COWNS_PER_BEHAVIOUR", 1);
 
   THREAD_NUMBER = opt.is<size_t>("--THREAD_NUMBER", 8);
-  BEHAVIOUR_RUNTIME_MS = opt.is<size_t>("--BEHAVIOUR_RUNTIME_MS", 1);
+  BEHAVIOUR_RUNTIME_MICROSECONDS = opt.is<size_t>("--BEHAVIOUR_RUNTIME_MICROSECONDS", 240);
 
-  size_t throughput = opt.is<size_t>("--THROUGHPUT", 5000);
+  size_t throughput = opt.is<size_t>("--THROUGHPUT", 150000);
   INTER_ARRIVAL_MICROSECS = 1000000 / throughput;
   
   INTER_ARRIVAL_STANDARD_DEVIATION = (long double) INTER_ARRIVAL_MICROSECS / opt.is<size_t>("--INTER_ARRIVAL_SD_DIVISOR", 10);
 
   ACCESS_STANDARD_DEVIATION = (long double) COWN_NUMBER / opt.is<double>("--ACCESS_SD_DIVISOR", 6);
 
-  MONITOR_SLEEP_MICROSECS = opt.is<size_t>("--MONITOR_SLEEP_MICROSECS", 100);
+  MONITOR_SLEEP_MICROSECS = opt.is<size_t>("--MONITOR_SLEEP_MICROSECS", 10000);
   TOTAL_BEHAVIOURS = opt.is<size_t>("--TOTAL_BEHAVIOURS", 100000);
   WRITE_TO_FILE = !opt.has("--DONT_SAVE");
 
@@ -97,7 +97,7 @@ void read_input(int argc, char *argv[])
           << "COWN_NUMBER: " << COWN_NUMBER << ", "
           << "COWN_DATA_SIZE: " << COWN_DATA_SIZE << ", "
           << "COWNS_PER_BEHAVIOUR: " << COWNS_PER_BEHAVIOUR << ", "
-          << "BEHAVIOUR_RUNTIME_MS: " << BEHAVIOUR_RUNTIME_MS << ", "
+          << "BEHAVIOUR_RUNTIME_MICROSECONDS: " << BEHAVIOUR_RUNTIME_MICROSECONDS << ", "
           << "MEMORY_TARGET_MB: " << MEMORY_TARGET_MB << ", "
           << "MONITOR_SLEEP_MICROSECS: " << MONITOR_SLEEP_MICROSECS << ", "
           << "ACCESS_STANDARD_DEVIATION: " << ACCESS_STANDARD_DEVIATION << ", "
@@ -116,7 +116,10 @@ private:
 public:
   Body(size_t id, size_t data_size, char *data) : id(id), data_size(data_size), data(data) {}
 
-  Body(size_t id, size_t data_size) : Body(id, data_size, new char[data_size]()) {}
+  Body(size_t id, size_t data_size) : Body(id, data_size, new char[data_size])
+  {
+    std::memset(this->data, 0, data_size);
+  }
 
   const size_t get_id() const
   {
@@ -132,6 +135,8 @@ public:
       archive.read((char *)&id, sizeof(id));
       archive.read((char *)&data_size, sizeof(data_size));
 
+      assert(data_size == COWN_DATA_SIZE);
+
       char *data = new char[data_size];
       archive.read(data, data_size);
       return new Body(id, data_size, data);
@@ -140,6 +145,10 @@ public:
     archive.write((char*)&body->id, sizeof(body->id));
     archive.write((char*)&body->data_size, sizeof(body->data_size));
     archive.write(body->data, body->data_size);
+    
+    delete[] body->data;
+    delete body;
+    
     return nullptr;
   }
 
@@ -150,7 +159,7 @@ public:
 
   ~Body()
   {
-    delete[] data;
+    // delete[] data;
   }
 };
 
@@ -216,7 +225,7 @@ void behaviour_spawning_thread(cown_ptr<Body*> *bodies,
       global_start.compare_exchange_strong(expected, start_time);
 
       volatile size_t dummy;
-      while (duration_cast<milliseconds>(high_resolution_clock::now() - start_time).count() < BEHAVIOUR_RUNTIME_MS)
+      while (duration_cast<microseconds>(high_resolution_clock::now() - start_time).count() < BEHAVIOUR_RUNTIME_MICROSECONDS)
       { ++dummy; }
 
       auto end_time = high_resolution_clock::now();
@@ -314,7 +323,7 @@ void write_to_file(long double total_runtime, uint64_t memory_usage_average, lon
               << COWN_NUMBER << ','
               << COWN_DATA_SIZE << ','
               << COWNS_PER_BEHAVIOUR << ','
-              << BEHAVIOUR_RUNTIME_MS << ','
+              << BEHAVIOUR_RUNTIME_MICROSECONDS << ','
               << "N/A" << ','
               << "N/A" << ','
               << ACCESS_STANDARD_DEVIATION << ','
@@ -331,7 +340,7 @@ void write_to_file(long double total_runtime, uint64_t memory_usage_average, lon
               << COWN_NUMBER << ','
               << COWN_DATA_SIZE << ','
               << COWNS_PER_BEHAVIOUR << ','
-              << BEHAVIOUR_RUNTIME_MS << ','
+              << BEHAVIOUR_RUNTIME_MICROSECONDS << ','
               << MEMORY_TARGET_MB << ','
               << MONITOR_SLEEP_MICROSECS << ','
               << ACCESS_STANDARD_DEVIATION << ','
