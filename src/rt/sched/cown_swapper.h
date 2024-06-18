@@ -54,10 +54,10 @@ namespace verona::rt
 
                     cowns[i]->serialize(ofs);
 
+                    ofs.flush();
                     ofs.close();
                 }
 
-                std::cout << "<<<<<<<<<<<<<<<<<<<<<<<<< Swapped " << count << "cowns" << std::endl;
                 to_be_swapped.store(0, std::memory_order_release);
                 // to_be_swapped.fetch_sub(swap_size);
                 auto& alloc = ThreadAlloc::get();
@@ -133,11 +133,27 @@ namespace verona::rt
             cown->last_access = std::chrono::steady_clock::now();
             if (cown->swapped)
             {
+                ++cown->num_fetches;
                 cown->swapped = false;
                 return true;
             }
 
             return false;
+        }
+
+        static uint64_t get_acceses(Cown *cown)
+        {
+            return cown->num_accesses;
+        }
+
+        static std::chrono::steady_clock::time_point get_acceses_time(Cown *cown)
+        {
+            return cown->last_access;
+        }
+
+        static uint64_t get_fetches(Cown *cown)
+        {
+            return cown->num_fetches;
         }
 
         static bool acquire_strong(Cown *cown)

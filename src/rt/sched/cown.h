@@ -108,6 +108,7 @@ namespace verona::rt
     std::atomic<Slot*> last_slot{nullptr};
 
     std::atomic_uint64_t num_accesses{0};
+    std::atomic_uint64_t num_fetches{0};
     std::chrono::steady_clock::time_point last_access;
 
     /*

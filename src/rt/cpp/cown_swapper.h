@@ -40,7 +40,7 @@ namespace verona::cpp
         {
             if (count == 0)
             {
-                to_be_swapped.store(0, std::memory_order_release);
+                to_be_swapped.fetch_sub(1, std::memory_order_release);
                 return;
             }
 
@@ -57,7 +57,7 @@ namespace verona::cpp
             }
 
             auto swap_lambda = CownSwapper::get_swap_lambda(new_size, new_cowns, swap_size, to_be_swapped);
-            Behaviour::schedule<YesTransfer>(new_size, new_cowns, std::forward<decltype(swap_lambda)>(swap_lambda), true);
+            Behaviour::schedule<NoTransfer>(new_size, new_cowns, std::forward<decltype(swap_lambda)>(swap_lambda), true);
         }
 
         template<typename T>
@@ -69,6 +69,25 @@ namespace verona::cpp
         friend class CownMemoryThread;
         
     public:
+        template<typename T>
+        static void debug_access_cown(cown_ptr<T>& cown_ptr)
+        {
+            CownSwapper::set_in_memory(cown_ptr.allocated_cown);
+        }
+
+        template<typename T>
+        static size_t debug_get_accesses_cown(cown_ptr<T>& cown_ptr)
+        {
+            return CownSwapper::get_acceses(cown_ptr.allocated_cown);
+        }
+
+        
+        template<typename T>
+        static size_t debug_get_fetches_cown(cown_ptr<T>& cown_ptr)
+        {
+            return CownSwapper::get_fetches(cown_ptr.allocated_cown);
+        }
+
         template<typename T>
         static std::pair<Cown *, size_t> register_cown(cown_ptr<T>& cown_ptr)
         {
@@ -89,7 +108,7 @@ namespace verona::cpp
                 return;
 
             ActualCown<T>* cown = cown_ptr.allocated_cown;
-            CownSwapper::register_cown(cown);
+            CownSwapper::unregister_cown(cown);
         }
 
         template<typename T>
