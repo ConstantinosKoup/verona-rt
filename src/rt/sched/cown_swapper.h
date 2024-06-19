@@ -58,8 +58,7 @@ namespace verona::rt
                     ofs.close();
                 }
 
-                to_be_swapped.store(0, std::memory_order_release);
-                // to_be_swapped.fetch_sub(swap_size);
+                to_be_swapped.fetch_sub(1);
                 auto& alloc = ThreadAlloc::get();
                 alloc.dealloc(cowns);
             };
@@ -80,9 +79,6 @@ namespace verona::rt
                 
                 ifs.close();
 
-                // std::cout << "Fetching cown " << cown.first << std::endl;
-
-                register_cown(cown.first);
                 register_to_thread(cown);
             };
         }
@@ -158,6 +154,8 @@ namespace verona::rt
 
         static bool acquire_strong(Cown *cown)
         {
+            // return true;
+
             auto succeeded = cown->acquire_strong_from_weak();
             if (!succeeded)
                 unregister_cown(cown);

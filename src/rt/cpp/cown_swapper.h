@@ -57,7 +57,7 @@ namespace verona::cpp
             }
 
             auto swap_lambda = CownSwapper::get_swap_lambda(new_size, new_cowns, swap_size, to_be_swapped);
-            Behaviour::schedule<NoTransfer>(new_size, new_cowns, std::forward<decltype(swap_lambda)>(swap_lambda), true);
+            Behaviour::schedule<YesTransfer>(new_size, new_cowns, std::forward<decltype(swap_lambda)>(swap_lambda), true);
         }
 
         template<typename T>

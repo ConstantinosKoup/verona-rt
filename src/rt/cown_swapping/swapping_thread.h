@@ -259,17 +259,10 @@ namespace verona::cpp
 
                     if (to_be_swapped.load(std::memory_order_acquire) < SWAP_COUNT_MAX)
                     {
-                        // if (memory_usage > prev_usage && multiplier > 10)
-                        //     multiplier -= 1;
-                        // else if (multiplier < 90)
-                        //     multiplier += 1;
-
                         prev_usage = memory_usage;
                         prev_swap_time = std::chrono::high_resolution_clock::now();
                         cowns_size_bytes -= actual_swap_size;
-                        // to_be_swapped.store(a, std::memory_order_acquire);
                         to_be_swapped.fetch_add(1, std::memory_order_acquire);
-                        // std::cout << "Spawning swap for " << cowns_to_swap.size() <<" conws" << std::endl;
                         ActualCownSwapper::schedule_swap(cowns_to_swap.size(), cowns_to_swap.data(), to_be_swapped, actual_swap_size, [this](cown_pair cown) 
                                                                     {
                                                                         cown_flags[cown.first] = true;
