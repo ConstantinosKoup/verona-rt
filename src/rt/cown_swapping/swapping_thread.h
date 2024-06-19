@@ -189,15 +189,28 @@ namespace verona::cpp
         }
 #endif
 
+        void unregister_cowns()
+        {
+            std::unique_lock<std::mutex> lock(cowns_mutex);
+            while (!cowns.empty())
+            {
+                CownSwapper::unregister_cown(cowns.back().first);
+                cowns.pop_back();
+            }
+            cowns_size_bytes = 0;
+        }
+
         void unregister_cowns(std::vector<cown_pair>& vec)
         {
             std::unique_lock<std::mutex> lock(cowns_mutex);
             while (!vec.empty())
             {
+                auto cown = vec.back();
+                cowns_size_bytes -= cown.second;
+                cowns.erase(std::find(cowns.begin(), cowns.end(), cown));
                 CownSwapper::unregister_cown(vec.back().first);
                 vec.pop_back();
             }
-            cowns_size_bytes = 0;
         }
 
         void monitorMemoryUsage() {
@@ -263,12 +276,15 @@ namespace verona::cpp
                         prev_swap_time = std::chrono::high_resolution_clock::now();
                         cowns_size_bytes -= actual_swap_size;
                         to_be_swapped.fetch_add(1, std::memory_order_acquire);
-                        ActualCownSwapper::schedule_swap(cowns_to_swap.size(), cowns_to_swap.data(), to_be_swapped, actual_swap_size, [this](cown_pair cown) 
+                        auto cowns_to_be_freed = 
+                            ActualCownSwapper::schedule_swap(cowns_to_swap.size(), cowns_to_swap.data(), to_be_swapped, 
+                                                                actual_swap_size, [this](cown_pair cown) 
                                                                     {
                                                                         cown_flags[cown.first] = true;
                                                                         cowns_size_bytes += cown.second;
                                                                     });
 
+                        unregister_cowns(cowns_to_be_freed);
                         actual_swap_size = 0;
                         cowns_to_swap.clear();
                     }
@@ -284,7 +300,7 @@ namespace verona::cpp
             }
 
             Logging::cout() << "Monitoring thread terminated" << Logging::endl;
-            unregister_cowns(cowns);
+            unregister_cowns();
 
             schedule_lambda([](){ Scheduler::remove_external_event_source(); });
         }

@@ -154,13 +154,7 @@ namespace verona::rt
 
         static bool acquire_strong(Cown *cown)
         {
-            // return true;
-
-            auto succeeded = cown->acquire_strong_from_weak();
-            if (!succeeded)
-                unregister_cown(cown);
-
-            return succeeded;
+            return cown->acquire_strong_from_weak();
         }
 
         static void release_strong(Cown *cown)
