@@ -94,14 +94,7 @@ namespace verona::cpp
     void serialize(std::iostream& archive)
     {
       if constexpr (is_serializable::value)
-      {
-        T new_value = BaseT::serialize(value, archive);
-
-        // if (value != nullptr)
-        //   delete value;
-          
-        value = new_value;
-      }
+        value = BaseT::serialize(value, archive);         
     }
   };
 

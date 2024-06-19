@@ -36,7 +36,8 @@ namespace verona::cpp
             CownSwapper::set_fetch_behaviour(cown.first, fetch_behaviour, dealloc_fetch<decltype(fetch_lambda)>);
         }
 
-        static std::vector<cown_pair> schedule_swap(size_t count, cown_pair *cowns, std::atomic_uint64_t& to_be_swapped, int64_t swap_size, std::function<void(cown_pair)> register_to_thread)
+        static std::vector<cown_pair> schedule_swap(size_t count, cown_pair *cowns, std::atomic_uint64_t& to_be_swapped, 
+            int64_t swap_size, std::function<void(cown_pair)> register_to_thread)
         {
             if (count == 0)
             {

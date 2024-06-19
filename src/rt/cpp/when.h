@@ -5,7 +5,6 @@
 #include "../sched/behaviour.h"
 #include "cown.h"
 #include "cown_array.h"
-#include "cown_swapper.h"
 
 #include <functional>
 #include <tuple>
@@ -486,6 +485,7 @@ namespace verona::cpp
       }
     }
   };
+
   /**
    * Template deduction guide for Access.
    */

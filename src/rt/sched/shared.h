@@ -68,7 +68,8 @@ namespace verona::rt
         o->weak_release(alloc);
         yield();
       }
-
+   
+      // If last, then collect the cown body.
       if (!last)
         return;
 
