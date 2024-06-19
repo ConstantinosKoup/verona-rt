@@ -41,9 +41,9 @@ namespace verona::rt
             return !cown->swapped;
         }
 
-        static auto get_swap_lambda(size_t count, Cown** cowns)
+        static auto get_swap_lambda(size_t count, Cown** cowns, size_t swap_size, std::atomic_uint64_t& to_be_swapped)
         {
-            auto swap_lambda = [=]()
+            auto swap_lambda = [=, &to_be_swapped]()
             {
                 auto cown_dir = get_cown_dir();
                 for (size_t i = 0; i < count; ++i)
@@ -54,11 +54,11 @@ namespace verona::rt
 
                     cowns[i]->serialize(ofs);
 
+                    ofs.flush();
                     ofs.close();
                 }
 
-                std::cout << "Swapped " << count << " cowns" << std::endl;
-            
+                to_be_swapped.fetch_sub(1);
                 auto& alloc = ThreadAlloc::get();
                 alloc.dealloc(cowns);
             };
@@ -79,9 +79,6 @@ namespace verona::rt
                 
                 ifs.close();
 
-                // std::cout << "Fetching cown " << cown << std::endl;
-
-                register_cown(cown.first);
                 register_to_thread(cown);
             };
         }
@@ -132,6 +129,7 @@ namespace verona::rt
             cown->last_access = std::chrono::steady_clock::now();
             if (cown->swapped)
             {
+                ++cown->num_fetches;
                 cown->swapped = false;
                 return true;
             }
@@ -139,8 +137,25 @@ namespace verona::rt
             return false;
         }
 
+        static uint64_t get_acceses(Cown *cown)
+        {
+            return cown->num_accesses;
+        }
+
+        static std::chrono::steady_clock::time_point get_acceses_time(Cown *cown)
+        {
+            return cown->last_access;
+        }
+
+        static uint64_t get_fetches(Cown *cown)
+        {
+            return cown->num_fetches;
+        }
+
         static bool acquire_strong(Cown *cown)
         {
+            // return true;
+
             auto succeeded = cown->acquire_strong_from_weak();
             if (!succeeded)
                 unregister_cown(cown);
