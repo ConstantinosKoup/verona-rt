@@ -68,8 +68,7 @@ namespace verona::rt
         o->weak_release(alloc);
         yield();
       }
-   
-      // If last, then collect the cown body.
+
       if (!last)
         return;
 
@@ -83,6 +82,7 @@ namespace verona::rt
       if (o->swapped)
         o->fetch_deallocator(o->fetch_behaviour);
 
+      // If last, then collect the cown body.
       o->queue_collect(alloc);
     }
 

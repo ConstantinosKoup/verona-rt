@@ -182,15 +182,19 @@ size_t get_normal_index(std::vector<size_t>& indices) {
 
 void init_bodies(cown_ptr<Body*> *bodies, std::vector<size_t>& indices)
 {
+  // Shuffle indices to not provide unfair advantage to sequential algorithms.
   std::iota(indices.begin(), indices.end(), 0);
   std::shuffle(indices.begin(), indices.end(), std::mt19937{std::random_device{}()});
 
   for (size_t i = 0; i < COWN_NUMBER; ++i)
     bodies[i] = make_cown<Body*>(new Body(i, COWN_DATA_SIZE));
 
+  // Access the cowns in the access pattern of the test, to allow for smart eviction algorithms to make predictions,
+  // as without this data they would all behave as random/round-robin until enough accesses have happened.
   for (size_t i = 0; i < TOTAL_BEHAVIOURS / 100; ++i)
     ActualCownSwapper::debug_access_cown(bodies[get_normal_index(indices)]);
 
+  // Register the cowns to the swapping thread so they can be evicted.
   if (!uninstrumented)
     CownMemoryThread::register_cowns(COWN_NUMBER, bodies);
 
@@ -205,11 +209,14 @@ void behaviour_spawning_thread(cown_ptr<Body*> *bodies,
 {
   std::mutex m;
 
+  // Prevent scheduler from terminating
   when() << []()
   {
     Scheduler::add_external_event_source();
   };
 
+  // Wait until the memory limit is reached before starting the benchmark, including this intilial phase would be 
+  // unfair to the benchmark as all the memory is allocated at once and the system needs to stabilise before being tested.
   if (!uninstrumented)
     CownMemoryThread::wait(std::unique_lock(m));
 
@@ -225,7 +232,7 @@ void behaviour_spawning_thread(cown_ptr<Body*> *bodies,
   static std::default_random_engine generator(static_cast<long unsigned int>(time(0)));
   std::normal_distribution<double> distribution(INTER_ARRIVAL_NANOSECONDS / 10, INTER_ARRIVAL_STANDARD_DEVIATION);
 
-  // Fill up thread queues
+  // Fill up thread queues, so that the initial phase is not counted in the benchmark
   for (size_t i = 0; i < THREAD_NUMBER * 2; ++i)
   {
     using namespace std::chrono;
@@ -234,7 +241,6 @@ void behaviour_spawning_thread(cown_ptr<Body*> *bodies,
     cown_ptr<Body *> carray[COWNS_PER_BEHAVIOUR];
     for (size_t j = 0; j < COWNS_PER_BEHAVIOUR; ++j)
       carray[j] = bodies[get_normal_index(indices)];
-
     cown_array<Body *> ca{carray, COWNS_PER_BEHAVIOUR};
 
     when(ca) << [](auto s)
@@ -246,11 +252,13 @@ void behaviour_spawning_thread(cown_ptr<Body*> *bodies,
       { ++dummy; }
     };
 
+
     volatile size_t duration = (INTER_ARRIVAL_NANOSECONDS - INTER_ARRIVAL_NANOSECONDS / 10) + distribution(generator);
     while (duration_cast<nanoseconds>(high_resolution_clock::now() - loop_start).count() < duration)
     { }
   }
   
+  // Start taking measurements for throughput and latency.
   global_start = std::chrono::high_resolution_clock::now();
   for (size_t i = 0; i < TOTAL_BEHAVIOURS ; ++i)
   {
@@ -260,9 +268,9 @@ void behaviour_spawning_thread(cown_ptr<Body*> *bodies,
     cown_ptr<Body *> carray[COWNS_PER_BEHAVIOUR];
     for (size_t j = 0; j < COWNS_PER_BEHAVIOUR; ++j)
       carray[j] = bodies[get_normal_index(indices)];
-
     cown_array<Body *> ca{carray, COWNS_PER_BEHAVIOUR};
 
+    // Spawn the test behaviour, with an exact runtime for easier load and latency calculation.
     auto spawn_time = std::chrono::high_resolution_clock::now();
     when(ca) << [spawn_time, &latencies, i](auto s)
     {
@@ -273,16 +281,19 @@ void behaviour_spawning_thread(cown_ptr<Body*> *bodies,
       while (duration_cast<microseconds>(high_resolution_clock::now() - start_time).count() < BEHAVIOUR_RUNTIME_MICROSECONDS)
       { ++dummy; }
       
+
       auto end_time = high_resolution_clock::now();
       latencies[i] = duration_cast<microseconds>(end_time - spawn_time).count();
     };
 
-
+    // Stop if time limit has been reached.
     if (duration_cast<seconds>(high_resolution_clock::now() - global_start).count() > TOTAL_TIME_SECS)
     {
       break;
     }
     
+    // Add some variability to inter arrival to sometimes push the system beyond what it can sustainably sustain
+    // to see if it can recover during the periods the load lessens.
     volatile size_t duration = (INTER_ARRIVAL_NANOSECONDS - INTER_ARRIVAL_NANOSECONDS / 10) + distribution(generator);
     while (duration_cast<nanoseconds>(high_resolution_clock::now() - loop_start).count() < duration)
     { }
@@ -316,6 +327,7 @@ void test_body(std::vector<uint64_t>& latencies,
 
   init_bodies(bodies, indices);
 
+  // Spawn the testing thread
   std::thread bs(behaviour_spawning_thread, bodies, std::ref(latencies), std::ref(memory_usage_average), 
                 std::ref(global_start), std::ref(global_end), std::ref(indices));
   sched.run();
@@ -350,9 +362,9 @@ void print_results(long double total_runtime, uint64_t memory_usage_average, std
   std::cout << "Latency 90th percentile: "
             << latencies[final_behaviours_ran * 10 / 100]  << " μs" << std::endl;
   std::cout << "Latency 95th percentile: "
-              << latencies[final_behaviours_ran * 50 / 100]  << " μs" << std::endl;
+              << latencies[final_behaviours_ran * 5 / 100]  << " μs" << std::endl;
   std::cout << "Latency 99th percentile: "
-              << latencies[final_behaviours_ran * 15 / 100]  << " μs" << std::endl;
+              << latencies[final_behaviours_ran * 1 / 100]  << " μs" << std::endl;
   std::cout << "Throughput: " << throughput << " behaviours per second" << std::endl;
 }
 
