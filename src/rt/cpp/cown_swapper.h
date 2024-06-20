@@ -15,6 +15,7 @@ namespace verona::cpp
 
     class ActualCownSwapper {
     private:
+        /// @brief Called to deallocate cown's fetch behaviour when it is being deallocated.
         template<typename Be>
         static void dealloc_fetch(BehaviourCore* behaviour)
         {
@@ -36,8 +37,10 @@ namespace verona::cpp
             CownSwapper::set_fetch_behaviour(cown.first, fetch_behaviour, dealloc_fetch<decltype(fetch_lambda)>);
         }
 
+        /// @brief Schedules swap for an array of cowns.
+        /// @return A vector of unused cowns that should be removed from swapping thread. 
         static std::vector<cown_pair> schedule_swap(size_t count, cown_pair *cowns, std::atomic_uint64_t& to_be_swapped, 
-            int64_t swap_size, std::function<void(cown_pair)> register_to_thread)
+            std::function<void(cown_pair)> register_to_thread)
         {
             if (count == 0)
             {
@@ -51,6 +54,7 @@ namespace verona::cpp
             std::vector<cown_pair> cowns_to_be_freed;
             for (size_t i = 0; i < count; ++i)
             {
+                // Check if the cown has any strong references left to check if it is still in use by the main program.
                 if (CownSwapper::acquire_strong(cowns[i].first))
                 {
                     set_fetch_behaviour(cowns[i], register_to_thread);
@@ -60,7 +64,7 @@ namespace verona::cpp
                     cowns_to_be_freed.push_back(cowns[i]);
             }
 
-            auto swap_lambda = CownSwapper::get_swap_lambda(new_size, new_cowns, swap_size, to_be_swapped);
+            auto swap_lambda = CownSwapper::get_swap_lambda(new_size, new_cowns, to_be_swapped);
             Behaviour::schedule<YesTransfer>(new_size, new_cowns, std::forward<decltype(swap_lambda)>(swap_lambda), true);
 
             return cowns_to_be_freed;
@@ -84,16 +88,18 @@ namespace verona::cpp
         template<typename T>
         static size_t debug_get_accesses_cown(cown_ptr<T>& cown_ptr)
         {
-            return CownSwapper::get_acceses(cown_ptr.allocated_cown);
+            return CownSwapper::get_num_accesses(cown_ptr.allocated_cown);
         }
 
         
         template<typename T>
         static size_t debug_get_fetches_cown(cown_ptr<T>& cown_ptr)
         {
-            return CownSwapper::get_fetches(cown_ptr.allocated_cown);
+            return CownSwapper::debug_get_fetches(cown_ptr.allocated_cown);
         }
 
+        /// @brief Perform a weak acquire on the cown to prevent it from being freed while the swapping thread holds it.
+        /// @return A cown pair if the cown is swappable, otherwise null.
         template<typename T>
         static std::pair<Cown *, size_t> register_cown(cown_ptr<T>& cown_ptr)
         {
@@ -107,6 +113,7 @@ namespace verona::cpp
             return {cown, size};
         }
 
+        /// @brief Perform weak release on a cown to allow it to be deallocated. 
         template<typename T>
         static void unregister_cown(cown_ptr<T>& cown_ptr)
         {
@@ -117,6 +124,7 @@ namespace verona::cpp
             CownSwapper::unregister_cown(cown);
         }
 
+        /// @return Underlying cown pointer if the cown is swappable, otherwise null.
         template<typename T>
         static ActualCown<T> *get_cown_if_swappable(cown_ptr<T>& cown_ptr)
         {
@@ -127,6 +135,8 @@ namespace verona::cpp
             return cown;
         }
         
+
+        /// @brief Schedule a swap behaviour.
         template<typename T>
         static void schedule_swap(cown_ptr<T>& cown_ptr)
         {
@@ -139,9 +149,8 @@ namespace verona::cpp
 
             cown_pair pair = {cown, sizeof_cown(cown)};
             std::atomic_uint64_t to_be_swapped{0};
-            size_t swap_size = 0;
             
-            schedule_swap(1, &pair, to_be_swapped, swap_size, [](cown_pair p){});
+            schedule_swap(1, &pair, to_be_swapped, [](cown_pair p){});
         }
     };
 

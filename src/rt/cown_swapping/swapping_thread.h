@@ -40,27 +40,35 @@ namespace verona::cpp
 
     private:
         const size_t memory_limit_bytes;
-        const size_t sleep_time;
+        const size_t multiplier;
         const bool debug;
         const SwappingAlgo swapping_algo;
 
+        // For keeping average memory usage.
         std::atomic_bool keep_average{false};
-        uint64_t sum{0};
-        size_t measure_count{0};
+        uint64_t total_memory_usage{0};
+        size_t memory_measure_count{0};
+        bool print_memory = false;
 
+        std::mutex cowns_mutex;
         std::vector<cown_pair> cowns;
+        // Flags indicating whether cowns are on disk or not.
         std::unordered_map<Cown*, bool> cown_flags{};
 
+        // Total siize of all cowns
         uint64_t cowns_size_bytes = 0;
 
+        // Next cown to be swapped for rotational algorithms.
         size_t next_cown{0};
-        std::mutex cowns_mutex;
+
         std::thread monitoring_thread;
+
         std::atomic_bool keep_monitoring;
         std::atomic_bool running{false};
         std::condition_variable cv;
 
-        std::atomic_uint64_t to_be_swapped{0};
+        // Number of swaps currently scheduled or running.
+        std::atomic_uint64_t swaps_running{0};
 
 #ifdef USE_SYSTEMATIC_TESTING
         std::atomic_bool registered{false};
@@ -84,8 +92,8 @@ namespace verona::cpp
                         {
                             if (cown_flags[cowns[i].first])
                             {
-                                next_cown = CownSwapper::get_acceses(cowns[i].first) 
-                                            <= CownSwapper::get_acceses(cowns[next_cown].first) ? i : next_cown;
+                                next_cown = CownSwapper::get_num_accesses(cowns[i].first) 
+                                            <= CownSwapper::get_num_accesses(cowns[next_cown].first) ? i : next_cown;
                             }
                         }
 
@@ -96,8 +104,8 @@ namespace verona::cpp
                         {
                             if (cown_flags[cowns[i].first])
                             {
-                                next_cown = CownSwapper::get_acceses_time(cowns[i].first) 
-                                            <= CownSwapper::get_acceses_time(cowns[next_cown].first) ? i : next_cown;
+                                next_cown = CownSwapper::get_last_access(cowns[i].first) 
+                                            <= CownSwapper::get_last_access(cowns[next_cown].first) ? i : next_cown;
                             }
                         }
 
@@ -136,8 +144,8 @@ namespace verona::cpp
             return ret;
         }
 
-        CownMemoryThread(size_t memory_limit_MB, size_t sleep_time, SwappingAlgo swapping_algo, bool debug) 
-        : memory_limit_bytes(memory_limit_MB * 1024 * 1024), sleep_time(sleep_time), debug(debug), swapping_algo(swapping_algo)
+        CownMemoryThread(size_t memory_limit_MB, size_t multiplier, SwappingAlgo swapping_algo, bool debug) 
+        : memory_limit_bytes(memory_limit_MB * 1024 * 1024), multiplier(multiplier), debug(debug), swapping_algo(swapping_algo)
         {
             this->keep_monitoring = true;
 
@@ -189,6 +197,7 @@ namespace verona::cpp
         }
 #endif
 
+        /// @brief Weak release all cowns and remove them from the thread.
         void unregister_cowns()
         {
             std::unique_lock<std::mutex> lock(cowns_mutex);
@@ -200,29 +209,31 @@ namespace verona::cpp
             cowns_size_bytes = 0;
         }
 
-        void unregister_cowns(std::vector<cown_pair>& vec)
+        /// @brief Removes all cowns without strong references left from the thread so they can be deallocated.
+        void unregister_cowns(std::vector<cown_pair>& cowns_to_be_freed)
         {
             std::unique_lock<std::mutex> lock(cowns_mutex);
-            while (!vec.empty())
+            while (!cowns_to_be_freed.empty())
             {
-                auto cown = vec.back();
+                auto cown = cowns_to_be_freed.back();
                 cowns_size_bytes -= cown.second;
                 cowns.erase(std::find(cowns.begin(), cowns.end(), cown));
-                CownSwapper::unregister_cown(vec.back().first);
-                vec.pop_back();
+                CownSwapper::unregister_cown(cowns_to_be_freed.back().first);
+                cowns_to_be_freed.pop_back();
             }
         }
 
+        /// @brief Main function, monitors memory usage and schedules swaps when the memory usage is within 90% of the
+        /// limit.
         void monitorMemoryUsage() {
             auto prev_t = std::chrono::system_clock::now();
             auto prev_swap_time = std::chrono::system_clock::now();
 
+            // Prevent the scheduler from terminating while the thread exists
             schedule_lambda([](){ Scheduler::add_external_event_source(); });
 
             std::vector<cown_pair> cowns_to_swap;
-            int multiplier = 60;
             int64_t actual_swap_size = 0;
-            size_t time = 1;
             uint64_t prev_usage = 0;
             std::this_thread::sleep_for(std::chrono::seconds(5));
 
@@ -237,18 +248,15 @@ namespace verona::cpp
                 uint64_t memory_usage = cowns_size_bytes + malloc_info.current_memory_usage;
                 if (std::chrono::system_clock::now() > prev_t + std::chrono::seconds(1))
                 {
+                    
+                    if (print_memory)
+                        std::cout << "Memory Usage: " << cowns_size_bytes / 1024 / 1024 << " MB" << std::endl;
 
-                    // std::cout << "Time: " << time++ << std::endl;
-                    // std::cout << "System Memory Usage: " << system_usage_bytes / 1024 / 1024 << " MB"<< std::endl;
-                    // std::cout << "Mallinfo Memory Usage: " << info.uordblks / 1024 / 1024 << " MB"<< std::endl;
-                    // std::cout << "snmalloc Memory Usage: " << malloc_info.current_memory_usage / 1024 / 1024 << " MB" << std::endl;
-                    // std::cout << "Cown Memory Usage: " << cowns_size_bytes / 1024 / 1024 << " MB" << std::endl;
-                    // std::cout << "======================= Cowns size: " << cowns.size() << ", Multiplier: " << multiplier << std::endl;
                     prev_t = std::chrono::system_clock::now();
                     if (keep_average)
                     {
-                        sum += memory_usage / 1024 / 1024;
-                        ++measure_count;
+                        total_memory_usage += memory_usage / 1024 / 1024;
+                        ++memory_measure_count;
                     }
                 }
 
@@ -256,8 +264,11 @@ namespace verona::cpp
                 yield();             
                 if (memory_limit_bytes > 0 && memory_usage > memory_limit_bytes * 90 / 100)
                 {
+                    // Limit the amount of swap behaviours that can concurrently exsist.
                     const size_t SIZE_LIMIT = cowns.size();
                     const size_t SWAP_COUNT_MAX = 1;
+
+                    // Get enough cowns to drop memory usage below the memory limit.
                     int64_t mem_to_swap_bytes = (memory_usage - (memory_limit_bytes * multiplier / 100));
                     while (!cowns.empty() && cowns_to_swap.size() < SIZE_LIMIT && mem_to_swap_bytes > actual_swap_size)
                     {
@@ -270,19 +281,20 @@ namespace verona::cpp
                         actual_swap_size += cown.second;
                     }
 
-                    if (to_be_swapped.load(std::memory_order_acquire) < SWAP_COUNT_MAX)
+                    // Check if the maximum number of concurrent swaps has been reached.
+                    if (swaps_running.load(std::memory_order_acquire) < SWAP_COUNT_MAX)
                     {
                         prev_usage = memory_usage;
                         prev_swap_time = std::chrono::high_resolution_clock::now();
                         cowns_size_bytes -= actual_swap_size;
-                        to_be_swapped.fetch_add(1, std::memory_order_acquire);
+                        swaps_running.fetch_add(1, std::memory_order_acquire);
                         auto cowns_to_be_freed = 
-                            ActualCownSwapper::schedule_swap(cowns_to_swap.size(), cowns_to_swap.data(), to_be_swapped, 
-                                                                actual_swap_size, [this](cown_pair cown) 
-                                                                    {
-                                                                        cown_flags[cown.first] = true;
-                                                                        cowns_size_bytes += cown.second;
-                                                                    });
+                            ActualCownSwapper::schedule_swap(cowns_to_swap.size(), cowns_to_swap.data(), swaps_running, 
+                                                                [this](cown_pair cown) 
+                                                                {
+                                                                    cown_flags[cown.first] = true;
+                                                                    cowns_size_bytes += cown.second;
+                                                                });
 
                         unregister_cowns(cowns_to_be_freed);
                         actual_swap_size = 0;
@@ -294,6 +306,7 @@ namespace verona::cpp
                     break;
 #endif
                 else
+                    // After memory has reached the limit notify the benchmark that it can begin.
                     cv.notify_all();
 
                 yield();
@@ -309,10 +322,11 @@ namespace verona::cpp
         CownMemoryThread(const CownMemoryThread&) = delete;
         void operator=(const CownMemoryThread&) = delete;
         
-        static CownMemoryThread& get_ref(size_t memory_limit_MB = 0, size_t sleep_time = 0,
+        /// @return The monitoring thread signleton. 
+        static CownMemoryThread& get_ref(size_t memory_limit_MB = 0, size_t multiplier = 0,
                                             SwappingAlgo swapping_algo = SwappingAlgo::LRU, bool debug = false)
         {
-            static CownMemoryThread ref = CownMemoryThread(memory_limit_MB, sleep_time, swapping_algo, debug);            
+            static CownMemoryThread ref = CownMemoryThread(memory_limit_MB, multiplier, swapping_algo, debug);            
             return ref;
         }
 
@@ -320,6 +334,11 @@ namespace verona::cpp
         static void start_keep_average()
         {
             get_ref().keep_average = true;
+        }
+
+        static void start_print_memory()
+        {
+            get_ref().print_memory = true;
         }
 
         static uint64_t get_memory_usage_MB()
@@ -341,9 +360,9 @@ namespace verona::cpp
             return table[algo];
         }
 
-        static void create(size_t memory_limit_MB, size_t sleep_time, SwappingAlgo swapping_algo)
+        static void create(size_t memory_limit_MB, size_t multiplier, SwappingAlgo swapping_algo)
         {
-            auto& ref = get_ref(memory_limit_MB, sleep_time, swapping_algo);
+            auto& ref = get_ref(memory_limit_MB, multiplier, swapping_algo);
             if (ref.running.exchange(true, std::memory_order_relaxed))
             {
                 Logging::cout() << "Error, cannot create new monitoring thread while old one is running" << Logging::endl;
@@ -351,14 +370,16 @@ namespace verona::cpp
             }
         }
 
+        /// @brief Wait for the memory usage to drop below the limit.
         static void wait(std::unique_lock<std::mutex> lock)
         {
             get_ref().cv.wait(lock);
         }
 
-        static auto create_debug(size_t memory_limit_MB, size_t sleep_time, SwappingAlgo swapping_algo)
+        /// @brief Don't initialise the thread so that it can be used with test harness.
+        static auto create_debug(size_t memory_limit_MB, size_t multiplier, SwappingAlgo swapping_algo)
         {
-            auto& ref = get_ref(memory_limit_MB, sleep_time, swapping_algo, /*debug =*/ true);
+            auto& ref = get_ref(memory_limit_MB, multiplier, swapping_algo, /*debug =*/ true);
             if (ref.running.exchange(true, std::memory_order_relaxed))
             {
                 Logging::cout() << "Error, cannot create new monitoring thread while old one is running" << Logging::endl;
@@ -368,6 +389,8 @@ namespace verona::cpp
             return [&ref](){ ref.monitorMemoryUsage(); };
         }
 
+        /// @brief Stops the monitoring thread.
+        /// @return The average memory usage while the thread was running.
         static uint64_t stop_monitoring()
         {
             auto& ref = get_ref();
@@ -384,9 +407,10 @@ namespace verona::cpp
             if (!ref.debug)
                 ref.monitoring_thread.join();
 
-            return ref.measure_count == 0 ? 0 : ref.sum / ref.measure_count;
+            return ref.memory_measure_count == 0 ? 0 : ref.total_memory_usage / ref.memory_measure_count;
         }
 
+        /// @brief Adds cown to the thread, allowing it to be swapped.
         template<typename T>
         static bool register_cowns(size_t count, cown_ptr<T>* cown_ptrs)
         {
@@ -399,6 +423,7 @@ namespace verona::cpp
 
             for (size_t i = 0; i < count; ++i)
             {
+                // Check if cown has strong references, acquire weak reference to prevent deallocation.
                 auto cown_pair = ActualCownSwapper::register_cown(cown_ptrs[i]);
                 if (cown_pair.first == nullptr)
                     return false;

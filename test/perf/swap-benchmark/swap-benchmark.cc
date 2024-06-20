@@ -31,6 +31,7 @@ size_t TOTAL_TIME_SECS;
 size_t INTER_ARRIVAL_NANOSECONDS;
 size_t INTER_ARRIVAL_STANDARD_DEVIATION;
 bool WRITE_TO_FILE;
+bool PRINT_MEMORY;
 std::atomic_char32_t behaviours_ran{0};
 char32_t final_behaviours_ran{0};
 uint64_t num_fetches{0};
@@ -92,15 +93,16 @@ void read_input(int argc, char *argv[])
   size_t throughput = opt.is<size_t>("--THROUGHPUT", 150000);
   INTER_ARRIVAL_NANOSECONDS = 1000000000 / throughput;
   
-  INTER_ARRIVAL_STANDARD_DEVIATION = 0;
+  INTER_ARRIVAL_STANDARD_DEVIATION = INTER_ARRIVAL_STANDARD_DEVIATION;
 
-  // ACCESS_STANDARD_DEVIATION = (long double) COWN_NUMBER / opt.is<double>("--ACCESS_SD_DIVISOR", 6);
   ACCESS_STANDARD_DEVIATION = (float) opt.is<int>("--ACCESS_SD", 90) / 100;
 
-  MULTIPLIER = opt.is<size_t>("--MULTIPLIER", 10000);
+  MULTIPLIER = opt.is<size_t>("--MULTIPLIER", 85);
   TOTAL_BEHAVIOURS = opt.is<size_t>("--TOTAL_BEHAVIOURS", 1000000);
   TOTAL_TIME_SECS = opt.is<size_t>("--TOTAL_TIME_SECS", 60);
   WRITE_TO_FILE = !opt.has("--DONT_SAVE");
+
+  PRINT_MEMORY = opt.has("--PRINT_MEMORY");
 
 
   std::cout << "Starting run with "
@@ -110,7 +112,6 @@ void read_input(int argc, char *argv[])
           << "COWNS_PER_BEHAVIOUR: " << COWNS_PER_BEHAVIOUR << ", "
           << "BEHAVIOUR_RUNTIME_MICROSECONDS: " << BEHAVIOUR_RUNTIME_MICROSECONDS << ", "
           << "MEMORY_TARGET_MB: " << MEMORY_TARGET_MB << ", "
-          << "MULTIPLIER: " << MULTIPLIER << ", "
           << "ACCESS_STANDARD_DEVIATION: " << ACCESS_STANDARD_DEVIATION << ", "
           << "THREAD_NUMBER: " << THREAD_NUMBER << ", "
           << "TOTAL_BEHAVIOURS: " << TOTAL_BEHAVIOURS << ", "
@@ -157,8 +158,6 @@ public:
     archive.write((char*)&body->data_size, sizeof(body->data_size));
     archive.write(body->data, body->data_size);
     
-    delete body;
-    
     return nullptr;
   }
 
@@ -175,7 +174,7 @@ public:
 
 size_t get_normal_index(std::vector<size_t>& indices) {
     static std::mt19937 generator(static_cast<long unsigned int>(time(0)));
-    auto zipf = zipf_distribution<size_t, double>(COWN_NUMBER, ACCESS_STANDARD_DEVIATION);
+    auto zipf = opencog::zipf_distribution<size_t, double>(COWN_NUMBER, ACCESS_STANDARD_DEVIATION);
     size_t index = zipf(generator) - 1;
     
     return indices[index];
@@ -219,6 +218,9 @@ void behaviour_spawning_thread(cown_ptr<Body*> *bodies,
     memory_usage_average = CownMemoryThread::get_memory_usage_MB();
   else
     CownMemoryThread::start_keep_average();
+
+  if (PRINT_MEMORY)
+    CownMemoryThread::start_print_memory();
 
   static std::default_random_engine generator(static_cast<long unsigned int>(time(0)));
   std::normal_distribution<double> distribution(INTER_ARRIVAL_NANOSECONDS / 10, INTER_ARRIVAL_STANDARD_DEVIATION);

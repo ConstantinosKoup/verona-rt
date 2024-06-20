@@ -91,10 +91,21 @@ namespace verona::cpp
       constexpr static bool value = std::is_pointer_v<T> && has_serialize<BaseT>::value && has_size<BaseT>::value;
     };
 
+    /// @brief Function responsible to serialising cown for both reading and writing. If the current value is null it 
+    /// acts as reading and if not as writing. It is the responsibility of the implementation to adhere to this rule
+    /// and manage its internal memory, in order to allow for flexibility in serialisation libraries and allocators used.
+    /// @param archive The archive stream where the cown is read/written from/to.
     void serialize(std::iostream& archive)
     {
       if constexpr (is_serializable::value)
-        value = BaseT::serialize(value, archive);         
+      {
+        auto new_value = BaseT::serialize(value, archive);
+
+        if (value != nullptr)
+          delete value;
+
+        value = new_value;         
+      }
     }
   };
 

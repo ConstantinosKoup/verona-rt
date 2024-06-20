@@ -29,19 +29,11 @@ namespace verona::rt
         }
 
     public:
-        static void clear_cown_dir()
-        {
-            namespace fs = std::filesystem;
-            auto cown_dir = get_cown_dir();
-
-            fs::remove_all(cown_dir);
-        }
-        static bool is_in_memory(Cown *cown)
-        {
-            return !cown->swapped;
-        }
-
-        static auto get_swap_lambda(size_t count, Cown** cowns, size_t swap_size, std::atomic_uint64_t& to_be_swapped)
+        /// @param count Number of cowns being swapped.
+        /// @param cowns Array of cowns to be swapped.
+        /// @param to_be_swapped Atomic variable indicating the number of swap behaviours that can concurrently exist.
+        /// @return The function used by the swap behaviour.
+        static auto get_swap_lambda(size_t count, Cown** cowns, std::atomic_uint64_t& to_be_swapped)
         {
             auto swap_lambda = [=, &to_be_swapped]()
             {
@@ -66,6 +58,10 @@ namespace verona::rt
             return swap_lambda;
         }
 
+        /// @param cown Cown to be fetched.
+        /// @param register_to_thread The callback function to inform the swapping thread that the cown is back in
+        /// memory.
+        /// @return The function used by the fetch behaviour. 
         static auto get_fetch_lambda(cown_pair cown, std::function<void(cown_pair)> register_to_thread)
         {
             return [cown, register_to_thread]()
@@ -83,11 +79,13 @@ namespace verona::rt
             };
         }
 
+        /// @brief Perform a weak acquire on the cown to prevent it from being freed while the swapping thread holds it.
         static void register_cown(Cown *cown)
         {
             cown->weak_acquire();
         }
 
+        /// @brief Perform weak release on a cown to allow it to be deallocated. 
         static void unregister_cown(Cown *cown)
         {
             cown->weak_release(ThreadAlloc::get());
@@ -103,19 +101,7 @@ namespace verona::rt
 
             return false;
         }
-
-        static bool num_accesses_comparator(cown_pair a, cown_pair b)
-        {
-            return a.first->num_accesses <= b.first->num_accesses;
-        }
-
-        
-        static bool last_access_comparator(cown_pair a, cown_pair b)
-        {
-            return a.first->last_access <= b.first->last_access;
-        }
-
-        
+ 
         static bool was_accessed(Cown *cown)
         {
             auto prev = cown->num_accesses.exchange(0);
@@ -137,17 +123,17 @@ namespace verona::rt
             return false;
         }
 
-        static uint64_t get_acceses(Cown *cown)
+        static uint64_t get_num_accesses(Cown *cown)
         {
             return cown->num_accesses;
         }
 
-        static std::chrono::steady_clock::time_point get_acceses_time(Cown *cown)
+        static std::chrono::steady_clock::time_point get_last_access(Cown *cown)
         {
             return cown->last_access;
         }
 
-        static uint64_t get_fetches(Cown *cown)
+        static uint64_t debug_get_fetches(Cown *cown)
         {
             return cown->num_fetches;
         }
@@ -157,11 +143,8 @@ namespace verona::rt
             return cown->acquire_strong_from_weak();
         }
 
-        static void release_strong(Cown *cown)
-        {
-            Shared::release(ThreadAlloc::get(), cown);
-        }
-
+        /// @brief Set the fetch behaviour and it's deallocator as function pointers in the cown so they can be called
+        /// from within the scheduler and the release method of shared.
         static void set_fetch_behaviour(Cown *cown, BehaviourCore *fetch_behaviour, void (*fetch_deallocator)(BehaviourCore *))
         {
             cown->fetch_behaviour = fetch_behaviour;
